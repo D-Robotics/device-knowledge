@@ -40,7 +40,7 @@ S100 的设计哲学不是堆算力,而是 **CPU + BPU + MCU 三块异构**,"感
 - MCU R52+ 锁步细节:**S100 = 1× DCLS + 1× Split-Lock(4 核);S600 = 1× DCLS + 2× Split-Lock(6 核)**(按安全需求选)
 - X5(传统 Linux RT 线程电机回路)vs S100(IPC→MCU 硬实时)的机器人链路对比图
 
-要在 **大脑(Linux/Acore)侧** 用 S100 独有的系统能力——零拷贝共享内存(hbmem)、Acore↔MCU/VDSP/BPU 的 IPC 与实时绑核、PCIe(RC/EP/加速卡)、EtherCAT 运动控制主站、PTP/gPTP 时间同步、系统 OTA / miniboot 升级——见 [S 系列 Linux 高级开发参考](references/s-advanced.md)。它与 MCU 侧(mcu-development.md)互补:前者是大脑侧怎么管内存/收发/升级,后者是小脑侧固件怎么写。适用 S100 家族(S100/S100E/S100P);S600 未在该文档覆盖。
+要在 **大脑(Linux/Acore)侧** 用 S100 独有的系统能力——零拷贝共享内存(hbmem)、Acore↔MCU/VDSP/BPU 的 IPC 与实时绑核、PCIe(RC/EP/加速卡)、EtherCAT 运动控制主站、PTP/gPTP 时间同步、系统 OTA / miniboot 升级——见 [S 系列 Linux 高级开发参考](references/s-advanced.md)。它与 MCU 侧(mcu-development.md)互补:前者是大脑侧怎么管内存/收发/升级,后者是小脑侧固件怎么写。主线按 S100 家族(S100/S100E/S100P)整理;**S600 大体同样覆盖**(EtherCAT 文档 DocScope 明列 S600 V5.1.0+、hbmem 有 S600 专属 sample),只是内存容量/MAC/版本门槛等按 S600 段为准——别把 S100 具体数值直接套 S600。
 
 ## 参考资料
 

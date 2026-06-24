@@ -5,7 +5,10 @@
 ## 适用范围(先看这里)
 
 - 本文覆盖的主题文档目录命名为 **S100X**,适用 **S100 家族 = RDK S100 + RDK S100P 两款产品**(官方型号表只有这两款:RDK S100=KS1E55Y/SoC 标记 **S100E**/12GB/1.5GHz/80TOPS,RDK S100P=KS1P75Y/SoC S100P/24GB/2.0GHz/128TOPS)。**`S100E` 是 RDK S100 的 SoC 芯片标记,不是独立的第三款板型**。hbmem 的 12G/24G 内存模式分别对应 S100(12GB)与 S100P(24GB)。
-- **S600 不在这些文档覆盖范围内**:`rdk_doc` 仓当前没有 S600 专属的 `02_linux_development` 高级开发文档。S600 的 hbmem / IPC / EtherCAT 等是否与 S100 一致**未经文档证实**,不要照搬到 S600,以官方 S600 手册为准。
+- **S600 大体也被这些 Acore 高级开发文档覆盖,但靠 `<DocScope>` 按板型分段**(本文以 S100 家族为主线整理):
+  - **EtherCAT**:同一份 `02_linux_development/.../16_driver_ethernet/02_ethercat.md` 用 `<DocScope products="RDK S600">` 明确写了 **RDK S600 V5.1.0+ 默认 Native(hobot)EtherCAT 驱动**(与 S100 V4.0.7+ 并列),并列出 S100/S600 四个网口 MAC——所以 §4 的 IgH 主站对 S600 适用,只是版本门槛/MAC 等按 S600 段为准。
+  - **hbmem**:S600 有**专属 sample 指南** `03_multimedia_development/03_S600_multimedia_application/12_hbmem_sample_guide.md`(支持平台明确含 RDK S600),`libhbmem` API 与 §1 同(com/graphic buffer、queue、pool、share pool、多进程共享),板上代码在 `/app/communication_demo/hbmem_demo/sample_hbmem`。
+  - 仍以官方 S600 段/手册为准的:内存模式容量(S600 非 12/24G 档)、PCIe/PTP 的 S600 专属差异、具体寄存器/MAC 值——这些 §1~§6 的 S100 数值不要直接套 S600。
 - 这些都是 **Acore(Linux/大脑)侧** 的系统能力;MCU(小脑)侧的 IPC / FreeRTOS / 固件烧录见同 skill 的 [MCU 开发参考](mcu-development.md)。两者互补:本文补的是「大脑侧怎么用 IPC、怎么管共享内存、怎么走 PCIe/EtherCAT/PTP」。
 
 ---
@@ -207,10 +210,10 @@ cat /sys/class/remoteproc/remoteproc_vdsp0/{state,version}              # runnin
 
 | 主题 | 一句话 | 机器人典型场景 | 适用板型 |
 |------|--------|----------------|----------|
-| hbmem | 零拷贝共享内存 + 队列/池 | 相机→BPU→后处理不拷贝大块内存 | S100 / S100P |
+| hbmem | 零拷贝共享内存 + 队列/池 | 相机→BPU→后处理不拷贝大块内存 | S100 / S100P / **S600**(S600 有专属 sample 指南) |
 | Acore IPC | Linux↔MCU/VDSP/BPU 核间通信 + 实时绑核 | 大脑下发指令给小脑硬实时回路 | S100 家族 |
 | PCIe | RC/EP、多板拓扑、加速卡、pub/sub API | S100 当 AI 加速卡 / 多板互联 | S100(SoC S100E)规格 |
-| EtherCAT | IgH 1.5 运动控制主站 | 多轴伺服总线控制 | S100 家族 |
+| EtherCAT | IgH 1.5 运动控制主站 | 多轴伺服总线控制 | S100 家族 + **S600**(S600 V5.1.0+ Native 驱动,文档 DocScope 明列) |
 | PTP/gPTP | ptp4l + phc2sys 时间同步 | 多传感器/多轴统一时基 | S100 家族 |
 | OTA / miniboot | AB/BAK + overlayfs / 单独升 miniboot | 量产设备远程升级、bootloader 热修 | S100 家族 |
 | VDSP | 内置 Xtensa Vision Q8 向量 DSP,卸载图像/信号前处理 | ISP 后、BPU 前的向量化前处理(翻转/算子)卸 CPU | S100 单核 / S600 双核(VDSP1 仅 S600) |
