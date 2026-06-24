@@ -15,7 +15,7 @@
 | 主机端工具链 | 算法工具链 / OpenExplorer(hb_mapper 体系) | 天工开物 / OpenExplorer OE(hb_compile 体系) |
 | 验证命令 | `hb_mapper checker` | `hb_compile --model x.onnx --march <nash-*>` |
 | 编译命令 | `hb_mapper makertbin --config x.yaml` | `hb_compile --config x.yaml` |
-| `march` 取值 | X3=`bernoulli2`、Ultra=`bayes`、X5=`bayes-e` | **S100=`nash-e`、S100P=`nash-m`**(官方 FAQ);S600=`nash`,后缀以最新文档为准 |
+| `march` 取值 | X3=`bernoulli2`、Ultra=`bayes`、X5=`bayes-e` | **S100=`nash-e`、S100P=`nash-m`**(官方 FAQ);S600=`nash-p` |
 | 产物后缀 | `.bin` | `.hbm` |
 | 中间/调试产物 | `hb_perf` html、`hb_mapper_*.log` | `*_quantized_model.bc`(HBIR,可 x86 推理比对) |
 | 主机性能评估 | `hb_perf x.bin` | x86 推理脚本(ONNX/HBIR/HBM 三态比对) |
@@ -34,7 +34,7 @@
 - 框架:支持 caffe 1.0 浮点模型,以及 `ir_version ≤ 7`、`opset10`/`opset11` 的 onnx 浮点模型;其他框架需先导出符合要求的 onnx。
 - 输入:只支持**固定 4 维** NCHW 或 NHWC,且 **N 维只能为 1**(如 `1x3x224x224`),不支持动态维度/非 4 维。
 - 后处理:浮点模型里**不要包含 nms 等后处理算子**,放到部署后处理里算。
-- 未列入算子支持列表的算子因 BPU 硬件限制暂不支持;转换前先查算子支持列表。
+- 未列入算子支持列表的算子因 BPU 硬件限制暂不支持;**转换前先查官方算子支持列表**:[supported_op_list](https://developer.d-robotics.cc/rdk_x_doc/Advanced_development/toolchain_development/intermediate/supported_op_list)(源 `rdk_x_doc:docs/07_Advanced_development/04_toolchain_development/intermediate/supported_op_list.md`);S 系列 Nash 算子约束以官网 S 工具链章节为准。
 
 ---
 

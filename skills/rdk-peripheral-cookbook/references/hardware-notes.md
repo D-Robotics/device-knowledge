@@ -84,9 +84,11 @@
 | 能力 | 说明 |
 |------|------|
 | SPI | RDK X3 仅 1 路 / X5 两路；路径 `/dev/spidev0.0`；**WS2812 灯带靠 SPI MOSI 模拟时序**（见第 27 节）|
-| **CAN**（RDK 强项）| RPi 无板载（需 MCP2515 HAT）；**X5 / S100 直接板载 CAN FD**，用 `ip link set can0 type can bitrate 500000` 起来 |
+| **CAN**（RDK 强项）| RPi 无板载（需 MCP2515 HAT）；**X5 = 标准 Linux SocketCAN**（集成 TCAN4550，`ip link set can0 ... fd on` + `cansend`/`candump`，经典 CAN 1M / CAN FD 数据段 2M）；**S100 / S600 的 CAN 在 MCU 域**，不是 SocketCAN，走 CANHAL/IPC + `/app/Can` sample（见 [CAN 与板级 IO](rdk-can-and-board-io.md)）；X3 无板载 CAN |
 | 音频 | **Jetson 无板载音频**（这是 Jetson 名梗）；RPi 4 有 3.5mm，RPi 5 砍掉；RDK 多数型号通过 40PIN I2S 接 HAT 或走 USB 声卡（见第 28 节） |
 | CSI 相机 | RPi / Jetson 走 22Pin 排线；RDK X5 4-lane、X3 仅 2-lane；**S100 独占 GMSL2 车规相机**，需扩展板 |
+
+> **CAN / S100 拨码 / S600 自锁口外设**的完整实操(X5 SocketCAN 仲裁域+数据域 `ip link`、S100/S600 MCU 域 CAN 通道映射与 CANHAL、S100 I2C5↔UART2 拨码二选一、S600 1.8V 自锁口 GPIO/UART6-7/SPI1)见独立参考 [CAN 与板级 IO 实操](rdk-can-and-board-io.md)。
 
 ### 24. libgpiod：跨平台通用 GPIO 统一 API（强烈推荐）
 

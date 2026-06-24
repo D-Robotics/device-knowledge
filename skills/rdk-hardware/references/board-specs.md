@@ -18,6 +18,8 @@
 - **GPIO**:40 针,28 路 GPIO,I2C×2/SPI×1/UART×3/PWM×2,3.3V
 - **摄像头**:X3 **主板 mipi×1**(1 路 MIPI CSI,接口2,2-lane);**X3 Module 载板 mipi×3**(CAM0 2lane / CAM1 4lane / CAM2 2lane)
 - **USB**:主板 USB3.0 Type-A×1 + USB2.0 Type-A×2 + Micro USB2.0 Device×1(芯片 1 路 USB 经 HUB 扩展)
+- **显示**:HDMI×1,最高 1080P(主板接口9 / X3 Module 载板接口2)
+- **电源**:主板 USB Type-C 供电,需 5V/3A 适配器;X3 Module 载板走 DC 接口,推荐 12V/2A 适配器
 - **探测标识**:`x3`、`X3`、`sunrise3`、`j3`、`xj3`、`X3J3`
 - **已知限制**:Max 5 TOPS — heavy models (YOLOv5x, large transformers) will be very slow;2 GB RAM — models larger than ~500 MB will OOM;Only one USB 3.0 host port on the development kit — multi-camera USB bandwidth is limited;Bernoulli2 BPU — limited operator support, no Transformer/Attention ops
 
@@ -34,6 +36,8 @@
 - **推理库**:bpu_infer_lib_x5
 - **GPIO**:40 针,28 路 GPIO,I2C×3/SPI×2/UART×5/PWM×8,3.3V
 - **摄像头**:mipi×2(2 x 4-lane MIPI CSI-2)、usb×4(USB 3.0)
+- **显示**:HDMI×1,最高 1080P(主板接口10 / X5 Module 载板接口21)
+- **电源**:USB Type-C 供电,需 5V/5A 适配器(X5 Module 载板同为 5V/5A 供电接口)
 - **探测标识**:`x5`、`X5`、`sunrise5`、`Sunrise 5`
 - **已知限制**:LLM limited to ≤2B parameter quantized models on-device;Bayes BPU — partial Attention op support, some Transformer models may fail conversion
 
@@ -50,8 +54,10 @@
 - **推理库**:bpu_infer_lib_x5
 - **GPIO**:40 针,28 路 GPIO,I2C×3/SPI×2/UART×5/PWM×8,3.3V
 - **摄像头**:mipi×4(4-lane MIPI CSI-2)、usb×4(USB 3.0)
+- **显示**:HDMI×1,最高 1080P;官方注明目前仅支持 1080p60 显示模式
+- **电源**:DC 接口供电,推荐套件自带适配器或至少 **12V/5A** 适配器(勿用电脑 USB 口供电,否则异常断电/反复重启)
 - **探测标识**:`ultra`、`Ultra`、`RDK Ultra`
-- **已知限制**:Higher power consumption — needs active cooling (12V/3A DC);Same Bayes architecture as X5 — model .bin compatible but performance scaled up
+- **已知限制**:Higher power consumption — needs active cooling,DC 至少 12V/5A;Same Bayes architecture as X5 — model .bin compatible but performance scaled up
 
 ## RDK S100 (`rdk-s100`)
 

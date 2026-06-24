@@ -6,16 +6,16 @@
 
 | 命令模式 | 说明 | 风险 | 适用板型 |
 | --- | --- | --- | --- |
-| `ros2\s+launch` | ROS2 launch file execution | moderate | x3/x5/ultra/s100/s100p |
-| `ros2\s+run` | ROS2 run single node | moderate | x3/x5/ultra/s100/s100p |
-| `ros2\s+topic` | ROS2 topic inspection | safe | x3/x5/ultra/s100/s100p |
-| `ros2\s+node` | ROS2 node inspection | safe | x3/x5/ultra/s100/s100p |
-| `ros2\s+param` | ROS2 parameter query/set | safe | x3/x5/ultra/s100/s100p |
-| `ros2\s+service` | ROS2 service call/list | safe | x3/x5/ultra/s100/s100p |
-| `ros2\s+action` | ROS2 action send goal / list | safe | x3/x5/ultra/s100/s100p |
-| `ros2\s+pkg` | ROS2 package query | safe | x3/x5/ultra/s100/s100p |
-| `ros2\s+interface` | ROS2 interface (msg/srv) show | safe | x3/x5/ultra/s100/s100p |
-| `ros2\s+bag` | ROS2 bag record/play | moderate | x3/x5/ultra/s100/s100p |
-| `source\s+\/opt\/tros` | TROS environment setup | safe | x3/x5/ultra/s100/s100p |
-| `colcon\s+build` | ROS2 workspace build | moderate | x3/x5/ultra/s100/s100p |
-| `rosdep\s+install` | ROS2 dependency install | moderate | x3/x5/ultra/s100/s100p |
+| `ros2\s+launch` | ROS2 launch file execution | moderate | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+run` | ROS2 run single node | moderate | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+topic` | ROS2 topic inspection | safe | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+node` | ROS2 node inspection | safe | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+param` | ROS2 parameter query/set | safe | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+service` | ROS2 service call/list | safe | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+action` | ROS2 action send goal / list | safe | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+pkg` | ROS2 package query | safe | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+interface` | ROS2 interface (msg/srv) show | safe | x3/x5/ultra/s100/s100p/s600 |
+| `ros2\s+bag` | ROS2 bag record/play | moderate | x3/x5/ultra/s100/s100p/s600 |
+| `source\s+\/opt\/tros` | TROS environment setup | safe | x3/x5/ultra/s100/s100p/s600 |
+| `colcon\s+build` | ROS2 workspace build | moderate | x3/x5/ultra/s100/s100p/s600 |
+| `rosdep\s+install` | ROS2 dependency install | moderate | x3/x5/ultra/s100/s100p/s600 |

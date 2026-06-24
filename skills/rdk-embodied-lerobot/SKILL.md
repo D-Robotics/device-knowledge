@@ -51,9 +51,10 @@ S100 的 CPU/BPU/MCU 谁干什么、固件烧录、向板端 agent 交接任务 
 ## 高频坑
 
 - **直接用上游 LeRobot / 新版 datasets** → 加载历史 v2.1 数据集报错。用 fork 或 `datasets==2.19.0`。
-- **`type` 填错 march** → S100 必须 `nash-*`,X5 必须 `bayes*`,否则编不出对的 BPU 模型。
-- **以为 ACT 工具链能直接上 X5** → 当前仅 S100/S100P(+ SO-101)验证过 ACT,X5/bayes 路径未充分验证(能编出 `.bin` ≠ 端到端可用),先说清。
+- **`type` 填错 march** → S100=`nash-e`、S100P=`nash-m`,X5 用 `bayes*`;`bpu_export_config.yaml` 的 `type` 枚举为 `nash-e/nash-m/nash-p/bayes-e/bayes`(`nash-p` 是真实变体)。
+- **以为 ACT 工具链能直接上 X5/S600** → `rdk_LeRobot_tools`(stable)**官方只验证过 S100/S100P + SO-101**;**S600 的 ACT 未在该工具链文档验证**(S600 是 4× Nash,具体 march 以工具链最新文档为准),投入前先告知用户。VLA/Pi0 路径才是 S600 的已知场景。
 - **VLA 当成纯板端单机** → openpi 是 client-server,Pi0 推理在 server(OE-LLM),板端是采集 + 执行 + 同步。
+- **以为本 skill 覆盖机械臂"从零"** → ❌ 本 skill 只管"**已训练 policy → BPU 部署**"。SO-101/piper 物理接线、舵机 ID/零点标定、串口波特率、遥操作采集、ACT 训练超参等**前半程在上游 [huggingface/lerobot](https://github.com/huggingface/lerobot) 与 [D-Robotics/lerobot](https://github.com/D-Robotics/lerobot)**(本仓 fork),不在本仓覆盖。
 
 ## 相关生态仓
 

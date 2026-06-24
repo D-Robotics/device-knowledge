@@ -14,7 +14,7 @@ description: 当用户要在 RDK 板上跑端侧 LLM/VLM 对话(llama.cpp BPU、
 
 ## 当前主路径 — hobot_llamacpp(X5 / S100)
 
-基于 [llama.cpp](https://github.com/ggml-org/llama.cpp) 的 LLM + VLM ROS 示例,是 **X5/S100/S100P 上端侧大模型的当前推荐路径**(官方编译宏只有 `-DPLATFORM_X5`/`-DPLATFORM_S100`,**S600 暂不在 hobot_llamacpp 支持平台**,S600 上跑 LLM 见 Model Zoo/官方最新文档):
+基于 [llama.cpp](https://github.com/ggml-org/llama.cpp) 的 LLM + VLM ROS 示例,是 **X5/S100/S100P 上端侧大模型的当前推荐路径**(官方编译宏只有 `-DPLATFORM_X5`/`-DPLATFORM_S100`,**S600 不走 hobot_llamacpp**——S600 端侧 LLM/VLM 由另一条官方栈承载,见下方「S600 路径 — D-Robotics_LLM_S600 / oellm_runtime」):
 
 - **模型**:GGUF 格式,**BPU 量化版托管在 HuggingFace `D-Robotics` 组织**(`-GGUF-BPU` 后缀)。
   - **X5**:InternVL2.5-1B、InternVL3-1B/2B、SmolVLM2-256M/500M。
@@ -24,6 +24,22 @@ description: 当用户要在 RDK 板上跑端侧 LLM/VLM 对话(llama.cpp BPU、
 - **编译**:C/C++,Ubuntu 22.04 + Linaro GCC 11.4.0;link `llama.cpp` **tag `b4749`**;`colcon build` 加 `-DPLATFORM_X5=ON` 或 `-DPLATFORM_S100=ON`。依赖 `dnn_node`/`cv_bridge`/`hbm_img_msgs`/`ai_msgs`。
 
 详细编译/运行步骤见 [llm-voice-stack](references/llm-voice-stack.md)。
+
+## S600 路径 — D-Robotics_LLM_S600 / oellm_runtime
+
+RDK S600 跑端侧 LLM/VLM **不用 hobot_llamacpp**(平台宏不含 S600),而是用官方「天工开物 OE / OE-LLM」体系下的 **D-Robotics_LLM_S600 大模型工具链 SDK**:
+
+- **运行时**:SDK 内的 **`oellm_runtime`**(核心库 `libxlm.so`,即 D-Robotics OE-LLM/LeapLLM 推理栈);S600 模型产物 `.hbm`(Nash,**march `nash-p`**)。
+- **官方支持模型(D-Robotics_LLM_S600 1.0.2)**:LLM = DeepSeek-R1-Distill-Qwen-1.5B、Qwen3-0.6B/1.7B/4B/8B;VLM = Qwen2.5-VL-3B/7B-Instruct、Qwen3-VL-2B/4B/8B-Instruct、InternVL2-2B;VLA = Pi0;ASR = whisper-medium。
+- **怎么拿**:
+  ```bash
+  wget https://d-robotics-aitoolchain.oss-cn-beijing.aliyuncs.com/llm_s600/1.0.2/D-Robotics_LLM_S600_1.0.2_SDK.tar.gz
+  wget https://d-robotics-aitoolchain.oss-cn-beijing.aliyuncs.com/llm_s600/1.0.2/D-Robotics_LLM_S600_1.0.2_Doc.zip   # 端侧逐条运行步骤在用户手册
+  ```
+  已编译模型链接在 SDK 内 `oellm_runtime/model/resolve_model_nash-p.md`(`nash-p` 即 S600)。
+- **OpenAI 兼容服务(可选)**:[`oellm_server`](https://github.com/D-Robotics/oellm_server) 在 `oellm_runtime` 上加 HTTP(`/v1/chat/completions` 支持 SSE 流式):`export LD_LIBRARY_PATH=<...>/oellm_runtime/lib:$LD_LIBRARY_PATH` 后 `python3 openai_server.py --model-type <0/1/4/7> --hbm-path <model.hbm> --tokenizer-dir <dir> --host 0.0.0.0 --port 8000`(README 现以 S100 SDK 示例,S600 沿用同套接口,正式联调以 S600 手册为准)。
+
+> S600 的 model_zoo benchmark(TTFT/TPS/内存)只是**性能数据**不是运行时;实际怎么跑以 D-Robotics_LLM_S600 工具链为准。
 
 ## 旧路径 — hobot_llm(仅 RDK X3 4GB)
 

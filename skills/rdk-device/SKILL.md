@@ -19,7 +19,7 @@ description: 当用户要在 RDK 板上把自己的模型走工具链端到端�
      - **S100/S100P/S600(天工开物/OE)**:工具是 **`hb_compile`**(不是 hb_mapper)——`hb_compile --model x.onnx --march nash-e` 快速验证 → 准备 ~100 张校准图(`horizon_tc_ui` transformer 预处理存 `.npy`)→ `hb_compile --config x.yaml` 产 `.hbm`(同时产 `*_quantized_model.bc` HBIR 可在 x86 比对精度)
      命令、march、config.yaml 模板见 [BPU 工具链对照](references/toolchain-workflow.md)。
   3) 产物（`.bin`/`.hbm`）scp 到板上 `/userdata/models/` → X3/X5/Ultra 用 `hobot_dnn` / TROS ROS2 节点加载（例如 `dnn_node_example`），S100/S100P/S600 用 `hbm_runtime`
-- **`march` 参数对照**（官方 FAQ 按板型区分）：X3=`bernoulli2`、Ultra=`bayes`、X5=`bayes-e`、**S100=`nash-e`、S100P=`nash-m`**、S600=`nash`(具体后缀以工具链最新文档为准)。**产物格式按架构**:X3/X5/Ultra=`.bin`,S100/S100P/S600=`.hbm`。
+- **`march` 参数对照**（官方 FAQ 按板型区分）：X3=`bernoulli2`、Ultra=`bayes`、X5=`bayes-e`、**S100=`nash-e`、S100P=`nash-m`**、S600=`nash-p`。**产物格式按架构**:X3/X5/Ultra=`.bin`,S100/S100P/S600=`.hbm`。
 - **不要**让用户在**板上** `apt install hb_mapper`——工具链在**主机 Docker** 里跑，板上只有 runtime（X3/X5/Ultra 是 `hobot-dnn`,S100/S100P 是 `hbm_runtime`）。
 - 若用户目的只是"想看效果"而非严肃部署，**引导他先跑预装的 `/app/pydev_demo/`**(X5 3.5.0+ 是 `02_detection_sample/` 或 `09_web_display_camera_sample/`;以板上 `ls /app/pydev_demo/` 为准)验证板卡正常，再谈自训模型。
 
@@ -42,7 +42,7 @@ description: 当用户要在 RDK 板上把自己的模型走工具链端到端�
 2. ONNX → 量化转换:X3/X5/Ultra 用 `hb_mapper checker`→`hb_mapper makertbin` 出 `.bin`;S100/S100P/S600 用天工开物/OE 的 **`hb_compile`**(`--model x.onnx --march nash-e` 验证 → `--config x.yaml` 出 `.hbm`)。详见 [BPU 工具链对照](references/toolchain-workflow.md)
 3. `hb_eval_perf` 评估推理性能 → 确认 fps/latency 满足需求
 4. 部署到 `/userdata/models/` 或 TROS 包内 `config/` 目录
-5. 转换失败查算子支持列表；Transformer 算子仅 S100 Nash 部分支持
+5. 转换失败查[官方算子支持列表](https://developer.d-robotics.cc/rdk_x_doc/Advanced_development/toolchain_development/intermediate/supported_op_list)；Transformer 算子仅 S100 Nash 部分支持
 6. **产物已上板、要写推理代码**：板端加载模型跑推理的编程 API(`pyeasy_dnn` / `hbm_runtime.HB_HBMRuntime` / C 的 libsp / C++ 的 libdnn)见 [板端推理编程 API 对照](references/board-inference-api.md)——toolchain-workflow 只到"转出 .bin/.hbm",板上"怎么 load+forward/run+取输出张量"看这页
 
 ## 工作流:首次启动、联网并接入 RDK Studio

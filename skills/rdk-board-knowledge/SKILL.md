@@ -68,6 +68,27 @@ description: 当需要确认 RDK 板型运行基线、排查常见报错(摄像�
 
 来源:<https://developer.d-robotics.cc/rdk_doc/Quick_start/hardware_introduction/rdk_x3> <https://developer.d-robotics.cc/rdk_doc/Quick_start/hardware_introduction/rdk_ultra> <https://developer.d-robotics.cc/rdk_doc/rdk_s/Quick_start/hardware_introduction/rdk_s100>
 
+## 工作流:S 系列 xburn 烧录(进下载模式 + Xburn 写镜像)
+
+**触发场景**:S100/S100P/S600 烧录系统 / xburn / 进下载模式 / DFU / Fastboot / 变砖刷机 / 空板烧录(X3/X5/Ultra 用 SD 卡 + balenaEtcher/官方烧录器,**不走 xburn**)。
+
+**主机端准备**:
+- **Linux**:`sudo apt install android-tools-adb android-tools-fastboot dfu-util`。
+- **Windows**:装 `sunrise5_winusb` 驱动(archive.d-robotics.cc/downloads/software_tools/winusb_drivers/,管理员跑 `install_driver.bat`)+ CH340 串口驱动;串口 **921600/8/None/1/无流控**。Type-C 数据线连板子 Type-C 口。
+
+**进 DFU 下载模式(按板型)**:
+- **S100/S100P**:① SW1 拨 ↑ 关电 → ② SW2 拨 ↑ 进 Download → ③ SW1 拨 ▽ 开电 → ④ `DOWNLOAD` 灯亮(不亮按 `K1` 复位);另需 **SW3 拨『从板载 eMMC 启动』**(不支持从 M.2 NVMe 启动)。
+- **S600 V0P1**:PWR KEY `OFF` 关电 → **短接跳线帽** → PWR KEY `ON` 开电 → `FLS` 红灯亮。
+- **S600 V0P2**:PWR KEY `OFF` 关电 → `FLASH` 拨码 `ON` → PWR KEY `ON` 开电 → `FLS` 红灯亮。
+
+**Xburn 烧录(全镜像)**:① 产品型号 S100 选 `RDKS100`、S600 选 `RDKS600` → ② 连接模式 `usb`、下载模式 `DFU+Fastboot`(空板/变砖)或 `Fastboot`(常规)→ ③ **介质 S100=`emmc`、S600=`ufs`**,固件类型 `secure` → ④ 选 product 固件目录 → **开始升级**,按提示上电 → ⑤ 完成关电,把烧录开关拨回退出 DFU,重新上电。
+
+**指定区域烧录(S100)**:Xburn 高级配置勾『烧录指定区域』可选 `miniboot_flash`/`miniboot_emmc`/`emmc`;备份产出 `.img`,**烧录时改后缀为 `.simg`** 再选。
+
+**安全**:烧录是 **dangerous** 级(flash 擦写),先确认板型与 product 镜像匹配(别拿 S100 镜像刷 S600);进下载模式的拨码/跳线务必断电操作。首启约 45s 默认配置,HDMI 应出 Ubuntu 桌面。
+
+来源:rdk_s_doc `docs/01_Quick_start/02_install_os/rdk_s100|rdk_s600/03_xburn/{01_windows,02_Linux}.md`。
+
 ## 故障速查:现象 → 切入点
 
 按报错关键词归类,先用下表定位方向,再到 [常见故障速查(55 条)](references/failure-hints.md) 取具体命令与文档:

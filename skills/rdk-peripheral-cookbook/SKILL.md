@@ -31,7 +31,7 @@ description: 当用户要在 RDK 上驱动 GPIO/I2C/SPI/UART、PWM 舵机、直�
 | 无刷 BLDC | 航模 ESC(50Hz PWM,可复用 PCA9685)或 ODrive/VESC(UART/CAN 闭环);S100 走 MCU 实时 |
 | WS2812 RGB 灯带 | **SPI MOSI 模拟 800kHz 时序**(2.4MHz,`NeoPixel-SPI`),RPi 的 `rpi_ws281x` 不适用 RDK |
 | 音频(无 TROS) | 标准 **ALSA**(`aplay -l`/`arecord`/`alsamixer`);**USB 声卡是万能兜底** |
-| CAN(RDK 强项) | X5/S100 板载 CAN FD,`ip link set can0 type can bitrate 500000` |
+| CAN(RDK 强项) | **仅 X5 是 Linux SocketCAN**(TCAN4550):`ip link set can0 type can bitrate 500000 dbitrate 2000000 fd on` + can-utils。**S100/S600 的 CAN 在 MCU 域**,走 CANHAL/IPC + `/app/Can` sample,**不能用 `ip link`**;X3 无板载 CAN。完整 bringup 见 [CAN 与板级 IO](references/rdk-can-and-board-io.md) |
 
 ## 零驱动诊断 SOP(设备不识别时,9 步通用,勿猜)
 
@@ -56,3 +56,4 @@ description: 当用户要在 RDK 上驱动 GPIO/I2C/SPI/UART、PWM 舵机、直�
 
 - [GPIO / 外设命令](references/gpio-commands.md)
 - [硬件与系统参考(详细章节)](references/hardware-notes.md)
+- [CAN 与板级 IO 实操(X5 SocketCAN / S100·S600 MCU 域 CAN / S100 拨码 / S600 自锁口)](references/rdk-can-and-board-io.md)

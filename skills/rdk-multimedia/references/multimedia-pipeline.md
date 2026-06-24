@@ -1,6 +1,6 @@
 # RDK 多媒体流水线速查(编解码规格 / sp_dev API / X 与 S 差异)
 
-> 来源:`rdk_doc`(X 系)`docs/07_Advanced_development/03_multimedia_development/{overview,video_input,video_processing,video_encode,video_decode,video_output}.md` 与 `docs/03_Basic_Application/06_multi_media_sp_dev_api/RDK_X5/**`;`rdk_s_doc`(S 系)`docs/07_Advanced_development/03_multimedia_development/01_S100/{01_camsys,03_codec,04_display}.md` 与 `02_multimedia_application/01_overview.md`。下表只收录文档明确列出的数值;拿不准的见末尾 "不确定"。
+> 来源:`rdk_doc`(X 系)`docs/07_Advanced_development/03_multimedia_development/{overview,video_input,video_processing,video_encode,video_decode,video_output}.md` 与 `docs/03_Basic_Application/06_multi_media_sp_dev_api/RDK_X5/**`;`rdk_s_doc`(S 系)`docs/07_Advanced_development/03_multimedia_development/01_S100/{01_camsys,03_codec,04_display}.md`、`02_multimedia_application/{01_overview,06_sample_codec}.md` 与 `03_S600_multimedia_application/{01_overview,02_sample_vin,03_sample_isp,06_sample_codec,09_sample_pipeline}.md`(`01_S100/03_codec.md` 自述「支持平台:RDKS100/RDKS600」,为 S100+S600 共用规格)。下表只收录文档明确列出的数值;拿不准的见末尾 "不确定"。
 
 ## 1. 模块与缩写对照(X 系)
 
@@ -135,6 +135,11 @@ MIPI 物理层:DPHY 4.5Gbps×4lane=18Gbps,CPHY 3.5Gsps×3trios=24Gbps。单 CIM 
 - JPU:最大 8192×8192、最小 32×32;支持 4:0:0/4:2:0/4:2:2/4:4:0/4:4:4;最多 **64** instance。
 - 上层封装为 **MediaCodec** 子系统,提供 H264/H265/JPEG 编解码与视频录像。
 
+**S600 Codec(同一份 03_codec.md,「支持平台」标注 RDKS100/RDKS600):** 编解码硬件规格文档只有这一份,VPU/JPU 的最大/最小分辨率、4K@90fps 性能、instance 上限(VPU≤32、JPU≤64)等特性表 **S100 与 S600 共用**,数值同上方 S100 块。S600 相对 S100 **唯一文档明确的差异是 VPU 多核**:
+- 原文「只有 S600 支持 VPU 多核,编解码示例通过 `-u` 配置不同核只在 S600 上生效」。`codec_demo` 的 `-u`(vpu core id)默认 0、可配 **0/1/2**(即 S600 暴露 3 个 VPU 核供选);S100 无此选项。
+- 编码能力上限(两者共用):H264 最高 **High@L5.2**;H265 最高 **Main / Main-tier @L5.1**;MJPEG/JPEG 为 ISO/IEC 10918-1 Baseline sequential。instance:Video≤32、MJPEG/JPEG≤64、Audio≤32。
+- 注意有 **两套 codec 示例**,别混:① 板上 `/app/multimedia_samples/sample_codec`(`06_sample_codec.md`,S100/S600 文档逐字节相同)走 `codec_config.ini` + `-e/-d` 位掩码(如 `-e 0x3` 启前两路编码),**无 `-u`**;② `codec_demo`(源码 `source/hobot-sp-samples/.../codec_demo`)走 `-m samplemode(0编/1解) -c codecid(0 h264/1 h265/2 mjpeg/3 jpeg) -w/-h -p pixfmt(0 yuv420p/1 nv12/2 nv21) -n 线程数 -u vpu核`,**`-u` 在这一套**。
+
 **S 系显示(来源 04_display.md):** 用 **IDE(Image Display Engine)/ IDU**,不是 X 系 VOT。S100 有 2 个 IDU,共 6 通道(通道 0/1/4/5 为 YUV 层、2/3 为 RGB 层),每通道最大输入 2880×2160,经 **MIPI DSI / MIPI CSI2 Device** 输出(共用一个 MIPI D-PHY)。YUV 层支持 Up-Scale 最大 6 倍。
 
 ## 8. S 系示例代码(来源 02_multimedia_application/01_overview.md)
@@ -147,12 +152,14 @@ MIPI 物理层:DPHY 4.5Gbps×4lane=18Gbps,CPHY 3.5Gsps×3trios=24Gbps。单 CIM 
 | `sample_pym` | PYM 缩小 |
 | `sample_gdc` | GDC 各种转换模式 |
 | `sample_codec` | H264/H265/JPEG/MJPEG 编解码 |
-| `sample_pipeline` | **VIN→ISP→PYM→GDC→CODEC 全链路** |
+| `sample_pipeline` | **VIN→ISP→YNR→PYM→(GDC)→VPU 全链路**(S 系实际链路 `vin→isp→ynr→pym`,YNR 是独立一级);S600 子目录:`single_pipe_vin_isp_ynr_pym_vpu` / `..._gdc` / `..._gdc_vpu` / `multi_pipe_vin_isp_ynr_pym_gdc_vpu` |
 | `sample_gpu_3d` | OpenCL / OpenGLES 3D GPU |
 | `sunrise_camera` | Web 智能摄像头 / 分析盒方案 |
 | `vp_sensors` | sensor 配置代码(非独立程序),加 sensor 看 `vp_sensors/README.md` |
 
-用法:`cd /app/multimedia_samples/<sample> && make`,然后 `./sample_xxx`(带 `-i/-w/-h/-f/-V` 等参数,无参数打印 help)。S600 另有 `03_S600_multimedia_application/` 同名一套示例。
+用法:`cd /app/multimedia_samples/<sample> && make`,然后 `./sample_xxx`(带 `-i/-w/-h/-f/-V` 等参数,无参数打印 help)。
+
+**S600 示例差异(来源 `03_S600_multimedia_application/`):** 目录布局与 S100 同(均在 `/app/multimedia_samples/` 下)。`sample_vin`/`sample_isp`/`sample_pipeline` 在 S600 文档中比 S100 多出 **`-m <mipi_rx>`** 选项 —— 为 Serdes sensor 指定所连的 mipi host,例 `./get_vin_data -s 4 -m 2 -l 1`(sensor idx 4、mipi host 2、link 1);非 Serdes sensor 无需 `-l/-m`。S600 **目前仅 mipi host 0、2、4、5 可用**(对照 `01_overview.md`「硬件使用指南」的 mipi host 编号图)。
 
 ## 9. 不确定 / 待核实
 

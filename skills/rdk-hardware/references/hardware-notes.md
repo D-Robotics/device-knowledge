@@ -89,7 +89,7 @@
 - **SSH**：X5/Ultra/S100 默认 `root` / `root`；X3 系统默认用户是 `sunrise/sunrise`，但 RDK Studio 的 SSH 通道多为 `root/root`（重刷后以实际为准），端口 22
 - **Type-C 以太网**：部分板型支持 USB Type-C 共享网络（`usb0` 接口，IP 通常 192.168.1.10）
 - **WiFi**：`nmcli dev wifi list` → `nmcli dev wifi connect <SSID> password <PWD>`
-- **CAN**（X5/S100/S600）：`ip link set can0 type can bitrate 500000` → `ip link set can0 up`。S100=MCU 域 CAN×5；S600=Main 域 CAN×4 + MCU 域 CAN×5
+- **CAN**：**仅 X5 是 Linux SocketCAN**（集成 TCAN4550，`ip link set can0 type can bitrate 500000` → `up`，支持 CAN FD `dbitrate ... fd on`）。**S100/S600 的 CAN 控制器在 MCU 域**（S100 默认 CAN5~9；S600 默认 CAN1~10），经 CAN2IPC→IPC→Acore 侧 CANHAL 库收发,**没有 `can0` 网络设备、`ip link` 不适用**——实操见 rdk-peripheral-cookbook 的 CAN 与板级 IO。X3/Ultra 无板载 CAN
 - **S100/S600 双千兆口**：**eth1 出厂固定静态 IP `192.168.127.10`(管理口)**,eth0 走 DHCP/手动——板子"连不上"先试 `ssh root@192.168.127.10`。S600 另有 2× 10GbE
 - **多机 ROS2 通信**：确保 `ROS_DOMAIN_ID` 一致，防火墙放行 UDP 7400+
 
@@ -132,7 +132,7 @@
 **工具链对应关系**（主机上安装，不在板子里）：
 - X3 → 地平线 Horizon OE SDK v1.x (Bernoulli2)，`hb_mapper` 命令族
 - X5 / Ultra → 地平线 Horizon OE SDK v2.x (Bayes)，同 `hb_mapper`，但 march 参数不同
-- S100 / S100P / S600 → D-Robotics **"天工开物（J6P/S100）"** 工具链，入口 <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/toolchain>，march **按 SKU 区分:S100=`nash-e`、S100P=`nash-m`**（官方 FAQ),S600=`nash`(以最新文档为准)，**产物是 `.hbm`**（非 `.bin`），板端 `hbm_runtime` 加载；命令族变化更大（新算子约束页以官网 S 系列工具链章节为准）
+- S100 / S100P / S600 → D-Robotics **"天工开物（J6P/S100）"** 工具链，入口 <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/toolchain>，march **按 SKU 区分:S100=`nash-e`、S100P=`nash-m`**（官方 FAQ),S600=`nash-p`，**产物是 `.hbm`**（非 `.bin`），板端 `hbm_runtime` 加载；命令族变化更大（新算子约束页以官网 S 系列工具链章节为准）
 - **误区**：转换工具链（`hb_mapper` 或天工开物）不在板子上（板子只负责跑 `.bin`/`.hbm`），不要叫用户在板上找转换器——他需要在 x86 主机（优先 Docker）跑工具链
 
 ### 16. RDK OS 版本线与用户系统差异

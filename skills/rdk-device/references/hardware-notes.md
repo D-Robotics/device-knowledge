@@ -77,7 +77,7 @@
 | ONNX opset 版本不对 | `hb_mapper checker` 报不支持的算子 | export 时固定 `--opset 11`（Bayes）/ 以工具链文档为准；X3 Bernoulli2 更严格，S100 Nash 最宽松 |
 | 校准数据集缺失 / 量化精度暴跌 30%+ | 转换成功但上板 mAP 暴跌 | 必须准备 **50-100 张**与训练集分布一致的图片做 PTQ；RKNN 社区经验（同理适用）：`do_quantization=True` 时校准集决定精度 |
 | 转换时 OOM | 大模型 `hb_mapper makertbin` 进程被杀 | 主机 RAM ≥ 16GB，或用 ZRAM；先试 YOLOv5s 不要直接 YOLOv5x |
-| 工具链 `march` 参数填错 | `hb_mapper checker --march bayes-e` 的 `bayes-e` 不能用在 X3 | X3 → `bernoulli2` / X5 → `bayes-e` / Ultra → `bayes` / **S100 → `nash-e`、S100P → `nash-m`**（官方 FAQ）/ S600 → `nash`；S 系列走天工开物/OE，产物 `.hbm`、板端 `hbm_runtime` |
+| 工具链 `march` 参数填错 | `hb_mapper checker --march bayes-e` 的 `bayes-e` 不能用在 X3 | X3 → `bernoulli2` / X5 → `bayes-e` / Ultra → `bayes` / **S100 → `nash-e`、S100P → `nash-m`**（官方 FAQ）/ S600 → `nash-p`；S 系列走天工开物/OE，产物 `.hbm`、板端 `hbm_runtime` |
 | 板上 runtime 版本与 .bin 不匹配 | `libdnn` / `hobot_dnn` 初始化失败 | `dpkg -l \| grep hobot-dnn` 看板上版本；必要时按官方发布说明升级 `hobot-dnn` / BPU runtime |
 | 在虚拟环境里 import hobot_dnn | `ModuleNotFoundError` | `hobot_dnn` Python bindings 只认系统 Python `/usr/bin/python3`；conda/venv 全部失败，社区反复踩 |
 

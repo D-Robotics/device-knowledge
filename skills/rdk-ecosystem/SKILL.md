@@ -23,7 +23,7 @@ description: 当用户询问 RDK 产品生态、买哪块板(X3/X5/Ultra/S100/S1
 **用户问"买哪块板 / 能不能跑 X"的决策口径**：
 - **一句话推荐**：新手/教学 → X3；机器人视觉主力 → **X5 8GB**（也能跑 1-2B VLM）；具身/实时关节控制 + 1.5-3B LLM/VLM → S100/S100P；多路 GMSL → S100P；**要顺滑跑 7-8B 大模型 / 顶级算力(560 TOPS) / 双臂具身 / 多路 10GbE → S600（S100P 7B 实测仅 ≈6.7 TPS,偏慢）**（价格和模型清单以官方渠道为准）。
 - **能不能跑 X 的判据**：
-  1) **LLM 对话**：X3 ❌；X5 ⚠️ ≤2B 量化（走 hobot_llamacpp）；S100/S100P ✅ 1.5-3B 流畅、7B 能跑但慢（**S100P 实测 7B q8 ≈ 6.7 TPS**）；**S600 ✅ 才真正顺滑跑 7-8B（Qwen3-8B w4 ≈ 31 TPS）**
+  1) **LLM 对话**：X3 ❌；X5 ⚠️ ≤2B 量化（走 hobot_llamacpp）；S100/S100P ✅ 1.5-3B 流畅、7B 能跑但慢（**S100P 实测 7B q8 ≈ 6.7 TPS**）；**S600 ✅ 才真正顺滑跑 7-8B（Qwen3-8B w4 ≈ 31 TPS,怎么落地见 rdk-llm-deployment 的 D-Robotics_LLM_S600 / oellm_runtime,不是 hobot_llamacpp）**
   2) **YOLO v5/v8**：X3 仅 v5s；X5 主力（实时）；S100/S100P 高帧率 + YOLO-World
   3) **DOSOD 开放词汇**：X5 ~12 fps；S100 ~45 fps
   4) **多路相机 / GMSL 车规**：仅 S100/S100P（配扩展板）

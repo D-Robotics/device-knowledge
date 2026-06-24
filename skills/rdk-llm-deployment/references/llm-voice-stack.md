@@ -106,7 +106,9 @@ ros2 run hobot_llamacpp hobot_llamacpp --ros-args \
 | [hobot_tts](https://github.com/D-Robotics/hobot_tts) | TTS |
 | [xiaozhi-in-rdk](https://github.com/D-Robotics/xiaozhi-in-rdk) | 小智一体语音助手 |
 | [hobot_clip](https://github.com/D-Robotics/hobot_clip) | 文本-图像特征检索 |
-| [hobot_xlm](https://github.com/D-Robotics/hobot_xlm) / [oellm_server](https://github.com/D-Robotics/oellm_server) | LLM(LeapLLM)/ OE-LLM server |
+| **D-Robotics_LLM_S600 SDK**(`oellm_runtime` / `libxlm.so`) | **S600 端侧 LLM/VLM/VLA/ASR 运行时**(OE-LLM / LeapLLM 栈);`wget …/llm_s600/1.0.2/D-Robotics_LLM_S600_1.0.2_SDK.tar.gz` |
+| **D-Robotics_LLM_S100 SDK**(`oellm_runtime`) | S100/S100P 端侧 LLM/多模态运行时;`…/llm_s100/1.0.0/D-Robotics_LLM_S100_1.0.0_SDK.tar.gz` |
+| [hobot_xlm](https://github.com/D-Robotics/hobot_xlm) / [oellm_server](https://github.com/D-Robotics/oellm_server) | LLM(LeapLLM)/ 在 `oellm_runtime` 上的 OpenAI 兼容 HTTP server(/health、/v1/models、/v1/chat/completions,SSE 流式) |
 | [PTQ_MiniCPM](https://github.com/D-Robotics/PTQ_MiniCPM) / [PTQ_InternVL2](https://github.com/D-Robotics/PTQ_InternVL2) | LLM/VLM 训练后量化示例 |
 | [huggingface.co/D-Robotics](https://huggingface.co/D-Robotics) | GGUF-BPU 量化模型托管 |
 | `archive.d-robotics.cc/llm-model` · `/tts-model` | apt 路径的模型 tar 包 |
@@ -117,3 +119,12 @@ ros2 run hobot_llamacpp hobot_llamacpp --ros-args \
 - [hobot_llm 文档(rdk_s 文档区镜像,内容同为 X3 系列 hobot_llm,非 S100 专属)](https://developer.d-robotics.cc/rdk_doc/rdk_s/Robot_development/boxs/generate/hobot_llm)
 - [TTS/ASR 语音 (hobot_audio)](https://developer.d-robotics.cc/rdk_doc/Robot_development/boxs/audio/hobot_audio)
 - [S100 文本图片特征检索 (hobot_clip)](https://developer.d-robotics.cc/rdk_doc/rdk_s/Robot_development/boxs/function/hobot_clip)
+- [RDK S 系 LLM 工具链(D-Robotics_LLM_S100 / S600,oellm_runtime 运行时 + 支持模型 + benchmark)](https://developer.d-robotics.cc/rdk_doc/rdk_s/Advanced_development/toolchain_development/LLM_Toolchain)
+
+## 7. S600 端侧 LLM — D-Robotics_LLM_S600 / oellm_runtime(补 hobot_llamacpp 不覆盖的板型)
+
+- S600 **不在** hobot_llamacpp 平台宏内(只有 X5/S100),改用 **D-Robotics_LLM_S600 SDK** 的 `oellm_runtime`(`libxlm.so`,OE-LLM/LeapLLM 栈)跑 `.hbm`(march `nash-p`)。
+- 1.0.2 支持:LLM(DeepSeek-R1-Distill-Qwen-1.5B、Qwen3-0.6B/1.7B/4B/8B)、VLM(Qwen2.5-VL-3B/7B、Qwen3-VL-2B/4B/8B、InternVL2-2B)、VLA(Pi0)、ASR(whisper-medium)。
+- 取包:`wget https://d-robotics-aitoolchain.oss-cn-beijing.aliyuncs.com/llm_s600/1.0.2/D-Robotics_LLM_S600_1.0.2_SDK.tar.gz`;已编译模型链接见 SDK 内 `oellm_runtime/model/resolve_model_nash-p.md`。
+- 起服务:`oellm_server` → `python3 openai_server.py --model-type <0/1/4/7> --hbm-path <m.hbm> --tokenizer-dir <dir> --port 8000`(先 `export LD_LIBRARY_PATH=<...>/oellm_runtime/lib:$LD_LIBRARY_PATH`)。
+- S600 benchmark(max context 4096):DeepSeek-R1-Distill-Qwen-1.5B w4 TTFT 68.9ms / 92.4 TPS / 2.2GB;Qwen3-0.6B w8 75.4 / 92.9 / 3.0;Qwen3-1.7B w4 91.2 / 75.0 / 3.7;Qwen3-4B w4 232.1 / 45.8 / 6.6;Qwen3-8B w4 283.6 / 31.4 / 9.1。

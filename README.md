@@ -31,7 +31,7 @@ D-Robotics RDK 及周边设备(Jetson / 树莓派 / Rockchip)的 **source-backed
 | [`rdk-llm-deployment`](skills/rdk-llm-deployment/) | 端侧 LLM/VLM 对话(llama.cpp BPU、GGUF、InternVL/SmolVLM)、语音助手(小智)、ASR(sensevoice)/TTS 闭环 |
 | [`rdk-ros`](skills/rdk-ros/) | TROS/ROS2 环境初始化、ros2 命令、节点排障、包定位、双目深度/Livox 感知节点(附九大类 TROS 节点目录) |
 | [`rdk-multimedia`](skills/rdk-multimedia/) | 硬件多媒体流水线:H264/H265/JPEG 编解码、VIN/ISP 取流、VPS/PYM 缩放、HDMI 显示,sp_dev / HB_* / MediaCodec 接口(区别于模型推理与 ROS 节点) |
-| [`rdk-peripheral-cookbook`](skills/rdk-peripheral-cookbook/) | 外设驱动食谱:GPIO/I2C/SPI/UART、PWM 舵机、电机、LED/WS2812、音频(ALSA)、跨平台引脚、libgpiod、零驱动诊断 |
+| [`rdk-peripheral-cookbook`](skills/rdk-peripheral-cookbook/) | 外设驱动食谱:GPIO/I2C/SPI/UART、PWM 舵机、电机、LED/WS2812、音频(ALSA)、**CAN(X5 SocketCAN / S100·S600 MCU 域 CANHAL)**、跨平台引脚、libgpiod、S100 拨码/S600 自锁口、零驱动诊断 |
 | [`rdk-accessories`](skills/rdk-accessories/) | D-Robotics 官方成品配件:GS130W/GS130Wi 双目相机、RDK IMU 模组(BMI088)、S100/S600 相机/MCU 端口扩展板——选型/接线/安装/官方 SDK 驱动 |
 | [`rdk-board-delegate`](skills/rdk-board-delegate/) | 板端委派、OpenClaw 交接信息结构、S100/S600"大小脑异构"协同、S 系列 MCU(R52+)固件开发(remoteproc/IPC/编译烧录) |
 | [`jetson-knowledge`](skills/jetson-knowledge/) | NVIDIA Jetson(Orin 系列)生态、选型、JetPack/TensorRT 工具链 |
