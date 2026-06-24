@@ -36,7 +36,9 @@
 
 **解码性能(X3):** H264/H265 = 3840×2160@60fps;JPEG/MJPEG YUV4:2:0 = 290M pixel/sec;最大 32 通道。VDEC 按帧发送(`VIDEO_MODE_FRAME`),输出可选解码序 / 显示序(`HB_VDEC_SetChnAttr` 配 `VDEC_CHN_ATTR_S`)。
 
-## 3. VPS 通道能力(X 系,来源 video_processing.md)
+## 3. VPS 通道能力(**X3**,来源 video_processing.md;X5 结构不同)
+
+> ⚠️ 下面这套(1×IPU+1×PYM+2×GDC、7 路 chn0~chn6、chn5 唯一 upscale)是 **X3(Bernoulli2)** 的 VPS;**X5(Bayes)的 VPS 结构不同**(见 `cdev_multimedia_api_x5/vio_api.md` 的 `sp_open_vps`:X5 为「5 个 downscale + 1 个 upscale」组),用 X5 时以 X5 文档为准。
 
 VPS 硬件 = 1×IPU + 1×PYM + 2×GDC,7 路输出 chn0~chn6:
 - chn0~chn4:downscale(最大缩到原图 **1/8**,>1/8),最小 32×32,最大 4096。

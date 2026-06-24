@@ -49,9 +49,9 @@ X 系列走 `rdk_x_doc`,S 系列走 `rdk_s_doc`,TROS 走 `tros_doc`,Studio 走 `
 
 | 主题 | 位置 | 覆盖板 |
 | --- | --- | --- |
-| [40pin 管脚定义 X](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/40pin_user_sample/40pin_define)⚠️ | rdk_x_doc | X |
-| [GPIO 应用 X](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/40pin_user_sample/gpio) ✅实测 | rdk_x_doc | X |
-| [I2C X](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/40pin_user_sample/i2c)⚠️ / [SPI](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/40pin_user_sample/spi)⚠️ / [UART](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/40pin_user_sample/uart)⚠️ / [PWM](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/40pin_user_sample/pwm)⚠️ | rdk_x_doc | X |
+| [40pin 管脚定义 X](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/01_40pin_user_sample/40pin_define)⚠️ | rdk_x_doc | X |
+| [GPIO 应用 X](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/01_40pin_user_sample/gpio) ✅实测 | rdk_x_doc | X |
+| [I2C X](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/01_40pin_user_sample/i2c)⚠️ / [SPI](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/01_40pin_user_sample/spi)⚠️ / [UART](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/01_40pin_user_sample/uart)⚠️ / [PWM](https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/01_40pin_user_sample/pwm)⚠️ | rdk_x_doc | X |
 | S100 40pin(define/gpio/pwm/uart/i2c/spi)— 源 `rdk_s_doc:docs/03_Basic_Application/03_40pin_user_guide/01_s100/*.md`;含嵌套 `01_s100` 子目录,**实测站点 slug 待逐一确认**,先给源路径 + S 站根⚠️ | rdk_s_doc | S100 |
 | S600 40pin(ext_io/gpio/uart/spi)— 源 `rdk_s_doc:docs/03_Basic_Application/03_40pin_user_guide/02_s600/*.md`⚠️ | rdk_s_doc | S600 |
 

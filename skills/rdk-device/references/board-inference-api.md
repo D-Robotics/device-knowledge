@@ -8,7 +8,7 @@
 
 | 板型 | Python 推理库 | 模型格式 | C/C++ 推理底座 |
 |---|---|---|---|
-| X3(全部镜像) | `hobot_dnn.pyeasy_dnn` | `.bin` | `/app/cdev_demo/bpu`,libsp/spcdev 封装 |
+| X3(全部镜像) | `hobot_dnn.pyeasy_dnn` | `.bin` | `/app/cdev_demo/bpu`,**spcdev(`libspcdev.so`)** 封装(`libsp`/sp_dev 是多媒体取流编解码 demo 用的,见 §5) |
 | X5 / Ultra(旧镜像) | `hobot_dnn.pyeasy_dnn` | `.bin` | 同上 |
 | **X5 软件 3.5.0+** | **`hbm_runtime.HB_HBMRuntime`** | **仍是 `.bin`** | 同上 |
 | S100 / S100P / S600 | `hbm_runtime.HB_HBMRuntime` | `.hbm` | `/app/cdev_demo/bpu`,libdnn(`hbDNN*`)+libhbucp |

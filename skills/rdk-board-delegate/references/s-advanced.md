@@ -4,7 +4,7 @@
 
 ## 适用范围(先看这里)
 
-- 本文覆盖的主题文档目录命名为 **S100X**,适用 **S100 家族(S100 / S100E / S100P)**。hbmem 的 12G / 24G 两种内存模式分别对应 S100(12GB)与 S100P(24GB)。
+- 本文覆盖的主题文档目录命名为 **S100X**,适用 **S100 家族 = RDK S100 + RDK S100P 两款产品**(官方型号表只有这两款:RDK S100=KS1E55Y/SoC 标记 **S100E**/12GB/1.5GHz/80TOPS,RDK S100P=KS1P75Y/SoC S100P/24GB/2.0GHz/128TOPS)。**`S100E` 是 RDK S100 的 SoC 芯片标记,不是独立的第三款板型**。hbmem 的 12G/24G 内存模式分别对应 S100(12GB)与 S100P(24GB)。
 - **S600 不在这些文档覆盖范围内**:`rdk_doc` 仓当前没有 S600 专属的 `02_linux_development` 高级开发文档。S600 的 hbmem / IPC / EtherCAT 等是否与 S100 一致**未经文档证实**,不要照搬到 S600,以官方 S600 手册为准。
 - 这些都是 **Acore(Linux/大脑)侧** 的系统能力;MCU(小脑)侧的 IPC / FreeRTOS / 固件烧录见同 skill 的 [MCU 开发参考](mcu-development.md)。两者互补:本文补的是「大脑侧怎么用 IPC、怎么管共享内存、怎么走 PCIe/EtherCAT/PTP」。
 
@@ -34,7 +34,7 @@
 
 **硬件/内存布局** —— S100X 支持 **12G / 24G interleave** 两种内存模式。默认 ION 预留三类 heap:`cma_reserved`(1GiB)、`carveout`(512MiB)、`cma`(512MiB)。heap 不足时回退顺序为 `cma_reserved => carveout => cma`(或对称组合)。heap 大小可在 dts 改,但要留够系统内存。
 
-**适用** —— S100 / S100E / S100P(12G 模式≈S100,24G 模式≈S100P)。
+**适用** —— RDK S100 / S100P(12G 模式=S100,24G 模式=S100P)。
 
 **坑** —— 不要直接对物理地址 `mmap`/传递,**不会增加引用计数**,存在释放后仍被访问的风险;改用 import 接口。
 
@@ -199,7 +199,7 @@ cat /sys/class/remoteproc/remoteproc_vdsp0/{state,version}              # runnin
 
 **坑(文档明列)**:中断 handler 内不可用 `printf`(会挂死 VDSP);VDSP 日志与 BL31/optee/kernel 共用串口,日志过多触发 watchdog(可 `echo 0 > /proc/sys/kernel/printk`);指针 `int64_t*` 需 8 字节对齐;coredump 落 `/log/coredump/`,用 `xt-gdb` 离线分析。
 
-**适用** —— S100(单核)/ S600(双核,VDSP1 专属 S600)。S100E/S100P 的 VDSP 核数文档未单独点名,以官方手册为准。
+**适用** —— S100(单核)/ S600(双核,VDSP1 专属 S600)。S100P 的 VDSP 核数文档未单独点名,以官方手册为准。
 
 ---
 
@@ -207,9 +207,9 @@ cat /sys/class/remoteproc/remoteproc_vdsp0/{state,version}              # runnin
 
 | 主题 | 一句话 | 机器人典型场景 | 适用板型 |
 |------|--------|----------------|----------|
-| hbmem | 零拷贝共享内存 + 队列/池 | 相机→BPU→后处理不拷贝大块内存 | S100/S100E/S100P |
+| hbmem | 零拷贝共享内存 + 队列/池 | 相机→BPU→后处理不拷贝大块内存 | S100 / S100P |
 | Acore IPC | Linux↔MCU/VDSP/BPU 核间通信 + 实时绑核 | 大脑下发指令给小脑硬实时回路 | S100 家族 |
-| PCIe | RC/EP、多板拓扑、加速卡、pub/sub API | S100 当 AI 加速卡 / 多板互联 | S100E 规格 |
+| PCIe | RC/EP、多板拓扑、加速卡、pub/sub API | S100 当 AI 加速卡 / 多板互联 | S100(SoC S100E)规格 |
 | EtherCAT | IgH 1.5 运动控制主站 | 多轴伺服总线控制 | S100 家族 |
 | PTP/gPTP | ptp4l + phc2sys 时间同步 | 多传感器/多轴统一时基 | S100 家族 |
 | OTA / miniboot | AB/BAK + overlayfs / 单独升 miniboot | 量产设备远程升级、bootloader 热修 | S100 家族 |

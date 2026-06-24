@@ -32,17 +32,17 @@ description: 当开发者问"X 在官方文档哪里 / 哪本手册讲 Y / 哪�
 
 六站都是 Docusaurus,`url: https://developer.d-robotics.cc`,`baseUrl: /<repo>/`,`routeBasePath: /`。由 GitHub 源文件路径反推站点 URL:
 
-> **规则**:取仓内 `docs/<path>.md`,**逐段去掉开头的 `NN_` / `NN-` 数字序号前缀**,去掉 `.md`,大小写原样保留,拼到 `https://developer.d-robotics.cc/<repo>/<去前缀路径>`。
+> **规则(基线,但有例外)**:取仓内 `docs/<path>.md`,大体上**逐段去掉开头的 `NN_` / `NN-` 数字序号前缀**,去掉 `.md`,大小写原样保留,拼到 `https://developer.d-robotics.cc/<repo>/<路径>`。
 
-实测样例(均返 200):
-- `rdk_x_doc` 的 `docs/03_Basic_Application/01_40pin_user_sample/gpio.md`
-  → `https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/40pin_user_sample/gpio`
-- `tros_doc` 的 `docs/03_boxs/detection/yolo.md`
-  → `https://developer.d-robotics.cc/tros_doc/boxs/detection/yolo`
-- `rdk_s_doc` 的 `docs/07_Advanced_development/05_mcu_development/08_mcu_ipc.md`
-  → `https://developer.d-robotics.cc/rdk_s_doc/Advanced_development/mcu_development/mcu_ipc`
+实测样例:
+- `tros_doc` 的 `docs/03_boxs/detection/yolo.md` → `.../tros_doc/boxs/detection/yolo`(剥前缀,200)
+- `rdk_s_doc` 的 `docs/07_Advanced_development/05_mcu_development/08_mcu_ipc.md` → `.../rdk_s_doc/Advanced_development/mcu_development/mcu_ipc`(剥前缀,200)
+- `rdk_x_doc` 的 `docs/04_vision/.../overview.md` → `.../Basic_Application/vision/overview`(剥前缀,200)
 
-**两个例外,推导前先查源文件 frontmatter**:
+> ⚠️ **前缀剥离不是全站统一规则,分 section 不一致**(实测):`01_40pin_user_sample/` 这层**保留 `01_` 前缀**——GPIO 正确 URL 是 `.../Basic_Application/01_40pin_user_sample/gpio`(200),去掉 `01_` 的 `.../40pin_user_sample/gpio` 反而 **404**。所以**给出推导 URL 前务必 `web_fetch` 实测 200**,尤其 40pin/install_os 这类带嵌套数字目录的 section。
+
+**例外,推导前先查源文件 frontmatter / 实测**:
+0. **某些叶子目录保留数字前缀**(如 `01_40pin_user_sample`),不能盲剥——见上方 ⚠️。
 1. 文件头有 `slug:` 时以 slug 为准(可保留数字前缀、甚至改名)。已知 `rdk_s_doc` 的 S100/S600 **硬件介绍**页用自定义 slug,如开发者套件页实测是
    `https://developer.d-robotics.cc/rdk_s_doc/01_Quick_start/01_hardware_introduction/01_rdk_s100/01_rdk_s100_kit`(保留了序号)。
 2. 拿不准时给 **GitHub 源路径 + 站点根**,不要臆造 URL。查源文件:

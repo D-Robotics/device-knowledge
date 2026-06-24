@@ -41,12 +41,12 @@
 
 > 在 S600 上跑这些对话式 LLM 的部署流程见 **rdk-llm-deployment**;本表只给“附录里有哪些 + 实测多少”。
 
-### 视觉 / 语音 sample(`feat/add-samples-s600-support` 分支,S100+S600 共用)
+### 视觉 / 语音 sample(`feat/add-samples-s600-support` 分支)
 
-按 README 与目录,该分支 `samples/` 下含(每个 sample 采用 `conversion/`(转换)+`evaluator/`(评测)+`model/`(下载)+`runtime/cpp|python`+`test_data/` 分层,C/C++ 与 Python 双接口):
+按 README 与目录,该分支 `samples/` 下含(每个 sample 采用 `conversion/`+`evaluator/`+`model/`+`runtime/cpp|python`+`test_data/` 分层,C/C++ 与 Python 双接口)。**README 支持矩阵按平台区分,别一概当 S600 都有**:
 
-- **视觉**:`yolo11`(检测)、`yolo11_pose`(姿态)、`yolo11_seg`(实例分割)、`yoloe11_seg`(开放词汇分割)、`yolov5`(检测)、`mobilenetv2`(分类)、`resnet18`(分类)、`paddle_ocr`(OCR)、`unetmobilenet`(分割)、`lanenet`(车道线)。
-- **语音**:`speech/asr`(语音识别)。
+- **S100 + S600 共用**:`yolov5`(检测)、`yolo11`(检测)、`yolo11_seg`(实例分割)、`yolo11_pose`(姿态)、`resnet18`/`mobilenetv2`(分类)、`unetmobilenet`(分割)、`speech/asr`(语音)。
+- **仅 S100(S600 不支持)**:`yoloe11_seg`(开放词汇分割)、`lanenet`(车道线)、`paddle_ocr`(OCR)。
 
 该分支附录暂未提供逐型号性能数,具体精度/帧率以 sample README 与后续正式发布为准。
 

@@ -19,6 +19,8 @@ TROS 视觉节点话题命名高度一致,理解约定后整张表都好读:
 
 下表「关键订阅/发布话题」给的是该节点最有应用价值的话题(默认值),完整话题与参数以文档为准。
 
+> **板型列说明**:下表凡列「X3」的节点,官方支持表通常**同时支持 RDK X3 Module**(表内为省略未逐一重复);S 系列产物 `.hbm`、X 系列 `.bin`。具体以各节点 README「支持平台」表为准。
+
 ---
 
 ## audio — 语音感知
@@ -130,7 +132,7 @@ TROS 视觉节点话题命名高度一致,理解约定后整张表都好读:
 
 | 应用 / 包 | 作用 | RDK 端最小 launch | 配合(PC 端) | 支持板型 | 文档 |
 |---|---|---|---|---|---|
-| **audio_control** | 语音命令词控制小车前后左右(配 hobot_audio/sensevoice) | `ros2 launch audio_control audio_control.launch.py` | `ros2 launch turtlebot3_gazebo empty_world.launch.py` | X3, X5, X5 Module, S100 | [apps/car_audio_control](https://developer.d-robotics.cc/rdk_doc/Robot_development/apps/car_audio_control) |
+| **audio_control** | 语音命令词控制小车前后左右(配 hobot_audio/sensevoice) | `ros2 launch audio_control audio_control.launch.py` | `ros2 launch turtlebot3_gazebo empty_world.launch.py` | X3, X5, X5 Module(**官方支持表无 S100**) | [apps/car_audio_control](https://developer.d-robotics.cc/rdk_doc/Robot_development/apps/car_audio_control) |
 | **audio_tracking** | 声源 DOA 角度追踪:小车转向声源并前进 | `ros2 launch audio_tracking audio_tracking.launch.py car_front_audio_angle:=90` | Gazebo empty_world | X3, X5, X5 Module | [apps/car_audio_tracking](https://developer.d-robotics.cc/rdk_doc/Robot_development/apps/car_audio_tracking) |
 | **gesture_control** | 手势控制小车(旋转/平移),链路:人体检测→手关键点→手势识别→控制 | `ros2 launch gesture_control gesture_control.launch.py` | Gazebo empty_world | X3, X5, X5 Module | [apps/car_gesture_control](https://developer.d-robotics.cc/rdk_doc/Robot_development/apps/car_gesture_control) |
 | **body_tracking** | 人体跟随:小车跟着人移动 | `ros2 launch body_tracking body_tracking_without_gesture.launch.py` | Gazebo empty_world | X3, X5, X5 Module | [apps/car_tracking](https://developer.d-robotics.cc/rdk_doc/Robot_development/apps/car_tracking) |

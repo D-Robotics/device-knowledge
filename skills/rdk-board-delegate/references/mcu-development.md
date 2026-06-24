@@ -212,7 +212,7 @@ fastboot flash MCU_b "xxx/MCU_S100_SIP_V2.0.img"
 
 > 来源:08_mcu_ipc.md「IpcBox 功能介绍」「应用 sample」。**sample 跑在 Acore 侧,需先启动 MCU1(见 §3.1)**。
 
-IpcBox 把 RunCmd / SPI / I2C / UART 外设统一接入 IPC 转发:`Acore <-> IPC <-> MCU <-> Peri`。开机默认**关闭**(会占外设资源),按需打开。
+IpcBox 把 RunCmd / SPI / I2C / UART 外设统一接入 IPC 转发:`Acore <-> IPC <-> MCU <-> Peri`。`IpcBox_InstanceMap[]` 里 **runcmd 默认 ENABLE,uart/spi/i2c 默认 DISABLE**(会占外设资源,按需打开);下面"永久打开"只针对后三者。
 
 ```bash
 # 查看各透传模块使能情况
