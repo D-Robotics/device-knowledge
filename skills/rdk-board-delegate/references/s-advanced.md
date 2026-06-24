@@ -172,6 +172,37 @@ sudo rdk-miniboot-update --build release --reboot y   # --build release|debug(�
 
 ---
 
+## 7. VDSP:内置向量 DSP(图像/信号前处理卸载)
+
+> 来源:`docs/07_Advanced_development/07_vdsp_development.md`(rdk_s_doc)。只写文档有出处的事实;build 包/调试文档需联系地瓜(D-Robotics)获取。
+
+**是什么** —— VDSP 是 S 系列 SoC 内置的 **Cadence/Tensilica Xtensa Vision Q8 向量 DSP** 核,作为 Acore(Linux)与 BPU 之外的第三类可编程算力,把图像/信号类前处理从 CPU 卸载。**核数随板型**:**S100 单核 vdsp0;S600 双核 vdsp0+vdsp1**(文档原文「S600 上包含两个 VDSP 核,VDSP1 的使用只有在 S600 上支持」)。所有核共用一个 Firmware,默认名 `vdsp0`。
+
+**典型用途** —— 文档 sample 是图像处理(`xi-sample-flip` 翻转、压力用例),基于 RPMSG 做 ARM(client)↔VDSP(server)请求-回复;适合 ISP 之后、BPU 之前的向量化前处理。与 §1 hbmem 零拷贝、§2 IPC 配合(`HB_MEM_USAGE_HW_*` 含 VDSP 标记,buffer 可在 CPU/BPU/ISP/Codec/VDSP/MCU 间零拷贝流转)。
+
+**SDK 两侧**:
+- **Acore(Linux)侧** —— 系统已预装,无需额外 SDK。三库:启停 `libvdsp.so`(头 `hb_vdsp_mgr.h`)、RPMSG `librpmsg.so`、IPCFHAL `libhbipcfhal.so`。
+- **VDSP 固件侧** —— Cadence Xtensa Vision Q8 工具链 **RI-2023.11**;**build 包/xplorer 调试文档不公开,需联系地瓜**;`bash make.sh` 产 `library/libvdsp0.a`,平台用 `export HR_TARGET_PROJECT=S100|S600` 区分。
+
+**加载/查看(Acore sysfs)**:
+```bash
+echo -n <firmware绝对路径> > /sys/module/firmware_class/parameters/path
+echo <firmware名称> > /sys/class/remoteproc/remoteproc_vdsp0/firmware   # S600 vdsp1 换 remoteproc_vdsp1
+echo start > /sys/class/remoteproc/remoteproc_vdsp0/state               # 卸载用 echo stop
+cat /sys/class/remoteproc/remoteproc_vdsp0/{state,version}              # running=已加载
+```
+心跳监控默认关(`heartbeat_enable`),开后 100ms 周期、连丢 7 次 reset VDSP。
+
+**关键接口(`hb_vdsp_mgr.h`)**:`hb_vdsp_init(dsp_id)`(`dsp_id` 0/1,**dsp1 仅 S600**)/ `hb_vdsp_start(dsp_id, timeout, pathname)`(`timeout` 0=异步/-1=同步/>0=带超时ms)/ `_stop`/`_reset`/`_get_status`/`_get_version`;内存 `hb_vdsp_mem_alloc`、SMMU `hb_vdsp_mmu_map`。核间通信:RPMSG 单帧 payload 1~240 字节(同一服务通道不支持并发),IPCFHAL 通道名形如 `cpu-vdsp-ins0ch0`。
+
+**板端 sample(开箱即用,无需 DSP 工具链)** —— `/app/vdsp_demo/vdsp_sample`(板上 `make`,`-d` 选核 `-p` 指 FW 路径 `-c` 选用例)、`/app/vdsp_demo/vdsp_ipcfhal_sample`。支持 S100/S600。
+
+**坑(文档明列)**:中断 handler 内不可用 `printf`(会挂死 VDSP);VDSP 日志与 BL31/optee/kernel 共用串口,日志过多触发 watchdog(可 `echo 0 > /proc/sys/kernel/printk`);指针 `int64_t*` 需 8 字节对齐;coredump 落 `/log/coredump/`,用 `xt-gdb` 离线分析。
+
+**适用** —— S100(单核)/ S600(双核,VDSP1 专属 S600)。S100E/S100P 的 VDSP 核数文档未单独点名,以官方手册为准。
+
+---
+
 ## 速查:这些主题归谁、典型机器人场景
 
 | 主题 | 一句话 | 机器人典型场景 | 适用板型 |
@@ -182,3 +213,4 @@ sudo rdk-miniboot-update --build release --reboot y   # --build release|debug(�
 | EtherCAT | IgH 1.5 运动控制主站 | 多轴伺服总线控制 | S100 家族 |
 | PTP/gPTP | ptp4l + phc2sys 时间同步 | 多传感器/多轴统一时基 | S100 家族 |
 | OTA / miniboot | AB/BAK + overlayfs / 单独升 miniboot | 量产设备远程升级、bootloader 热修 | S100 家族 |
+| VDSP | 内置 Xtensa Vision Q8 向量 DSP,卸载图像/信号前处理 | ISP 后、BPU 前的向量化前处理(翻转/算子)卸 CPU | S100 单核 / S600 双核(VDSP1 仅 S600) |

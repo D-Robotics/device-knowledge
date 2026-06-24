@@ -16,6 +16,10 @@ description: 当用户询问 RDK 产品生态、买哪块板(X3/X5/Ultra/S100/S1
 - **D-Robotics 开发者社区**：developer.d-robotics.cc/forum
 - **NodeHub**：developer.d-robotics.cc/en/nodehub — RDK 应用中心
 
+**S 系列官方方案展示(具身/机器人样板,看可行性与对标,不是 build 教程)** —— 来源 rdk_s_doc `06_Application_case`(社区方案展示清单,每条带 `developer.d-robotics.cc/forumDetail/...`),用于回答"S100 这类板真能跑具身/机器人吗、有没有对标":
+- **四足机器狗**:宇树 Go2 复现 CoRL2022《Walk These Ways》多步态;**小人形+语音**:高擎「小 Pi」运控迁移保 99.9% 量化精度、推理 0.6ms,语音 MDTC 唤醒;**低速无人车 BEV**:多任务 60FPS/17ms/≈0.8% NDS 损失;**LeRobot 全开源双臂**:ACT 自主叠衣,整套 <5千元,46ms 生成 50 组动作;**TRON1 双足**:运控迁移保 99.99% 精度、部署约 1 小时。
+- 这些是"能不能跑/有没有对标"的证据,不是步骤。复现 LeRobot/ACT→rdk-embodied-lerobot;语音/LLM→rdk-llm-deployment;ROS2/导航→rdk-ros。**X 系列(X5)的完整 build 级整机案例(AMR、CNN 巡线小车)在 rdk-ros 的 references/app-cases.md。**
+
 **用户问"买哪块板 / 能不能跑 X"的决策口径**：
 - **一句话推荐**：新手/教学 → X3；机器人视觉主力 → **X5 8GB**（也能跑 1-2B VLM）；具身/实时关节控制 + 1.5-3B LLM/VLM → S100/S100P；多路 GMSL → S100P；**要顺滑跑 7-8B 大模型 / 顶级算力(560 TOPS) / 双臂具身 / 多路 10GbE → S600（S100P 7B 实测仅 ≈6.7 TPS,偏慢）**（价格和模型清单以官方渠道为准）。
 - **能不能跑 X 的判据**：

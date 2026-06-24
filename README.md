@@ -21,6 +21,7 @@ D-Robotics RDK 及周边设备(Jetson / 树莓派 / Rockchip)的 **source-backed
 | [`rdk-ecosystem`](skills/rdk-ecosystem/) | RDK 生态、产品选型(买哪块板)、能否跑某模型、与 Jetson/树莓派/RK3588 跨平台对比、LLM/VLM 期待、官方资料来源 |
 | [`rdk-hardware`](skills/rdk-hardware/) | RDK 硬件子系统与系统底座:40PIN GPIO、摄像头、BPU 推理流水线、系统路径、网络、散热、BPU 架构演进、OS 版本线、板型感知 |
 | [`rdk-board-knowledge`](skills/rdk-board-knowledge/) | 板型基线确认、常见报错诊断、高频误区纠正(附 55 条故障速查、诊断命令库与官方 FAQ) |
+| [`rdk-system-config`](skills/rdk-system-config/) | 系统级配置:Wi-Fi/蓝牙/有线网、config.txt 启动配置、CPU/BPU 调频与温控风扇、开机自启、Samba/NFS 文件共享、srpi-config TUI(X 与 S 差异) |
 | [`rdk-doc-finder`](skills/rdk-doc-finder/) | "去哪查":把任意问题指到官方文档站(rdk_x_doc/rdk_s_doc/tros_doc/model_zoo_doc/rdk_studio_doc/accessories_doc)的章节 + URL,含 URL 推导规则与全量主题索引 |
 | [`rdk-command-manual`](skills/rdk-command-manual/) | 查某条 RDK 专属命令/系统命令的语法/选项/适用板型:hrut_*、srpi-config、rdkos_info、rdk-miniboot-update、devmem 等(命令为锚点) |
 | [`rdk-source-map`](skills/rdk-source-map/) | 在 D-Robotics GitHub 组织(327+ 仓)里定位/区分仓库:某仓是干嘛的/哪层/哪块板、任务该去哪个仓、hobot- vs hobot_、从源码构建 OS 镜像/TROS(repo/manifest/rdk-gen/vcstool) |

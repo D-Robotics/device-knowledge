@@ -93,4 +93,5 @@ ros2 命令不存在多半是没 source TROS 环境;先确认环境与包存在�
 
 - [TROS/ROS2 命令](references/ros-commands.md)
 - [TROS 功能节点目录(感知能力→节点速查)](references/tros-node-catalog.md)
+- [官方端到端应用案例(X 系列 AMR / 巡线小车)](references/app-cases.md)（从硬件清单→传感器自检→kalibr 标定→建图导航 / CNN 采集标注训练量化→板端 BPU 推理闭环的整链路;单点节点仍查 tros-node-catalog）
 - [硬件与系统参考(详细章节)](references/hardware-notes.md)

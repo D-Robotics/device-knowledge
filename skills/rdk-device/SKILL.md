@@ -43,6 +43,7 @@ description: 当用户要在 RDK 板上把自己的模型走工具链端到端�
 3. `hb_eval_perf` 评估推理性能 → 确认 fps/latency 满足需求
 4. 部署到 `/userdata/models/` 或 TROS 包内 `config/` 目录
 5. 转换失败查算子支持列表；Transformer 算子仅 S100 Nash 部分支持
+6. **产物已上板、要写推理代码**：板端加载模型跑推理的编程 API(`pyeasy_dnn` / `hbm_runtime.HB_HBMRuntime` / C 的 libsp / C++ 的 libdnn)见 [板端推理编程 API 对照](references/board-inference-api.md)——toolchain-workflow 只到"转出 .bin/.hbm",板上"怎么 load+forward/run+取输出张量"看这页
 
 ## 工作流:首次启动、联网并接入 RDK Studio
 
@@ -197,4 +198,5 @@ description: 当用户要在 RDK 板上把自己的模型走工具链端到端�
 
 - [摄像头命令](references/camera-commands.md)
 - [BPU 工具链对照:X 系列 hb_mapper→.bin vs S 系列 hb_compile→.hbm](references/toolchain-workflow.md)（含 OE/天工开物 Docker、hb_compile 命令、config.yaml 模板、hbm_runtime 板端加载、Nash 算子约束）
+- [板端推理编程 API 对照](references/board-inference-api.md)（**模型已转好、要在板上写代码加载跑推理时看这里**:X3/旧 X5 用 `hobot_dnn.pyeasy_dnn`、X5 3.5.0+/S 系用 `hbm_runtime.HB_HBMRuntime`;C/C++ 走 libsp(X) / libdnn+libhbucp(S);含调用流程、输入输出 tensor、调度参数、各 sample 矩阵）
 - [硬件与系统参考(详细章节)](references/hardware-notes.md)

@@ -25,10 +25,10 @@ skills/<name>/
 
 ## Skill 划分与 references 分层
 
-19 个 skill 覆盖 RDK 核心(8)+ AI 部署(3)+ 配件(1)+ 导航/手册(3)+ 设备族 starter(3)+ 桌面端开发(1):
+20 个 skill 覆盖 RDK 核心(9)+ AI 部署(3)+ 配件(1)+ 导航/手册(3)+ 设备族 starter(3)+ 桌面端开发(1):
 
-- **RDK 核心**:`rdk-ecosystem` / `rdk-hardware` / `rdk-board-knowledge` / `rdk-device` / `rdk-ros`(附 TROS 节点目录)
-  / `rdk-multimedia`(硬件编解码/相机流水线)/ `rdk-peripheral-cookbook` / `rdk-board-delegate`(含 S 系列 MCU 开发 + Acore 侧 hbmem/IPC/EtherCAT/PCIe/OTA)。
+- **RDK 核心**:`rdk-ecosystem` / `rdk-hardware` / `rdk-board-knowledge` / `rdk-system-config`(系统配置)/ `rdk-device`(附工具链 + 板端推理 API)/ `rdk-ros`(附 TROS 节点目录 + 应用案例)
+  / `rdk-multimedia`(硬件编解码/相机流水线)/ `rdk-peripheral-cookbook` / `rdk-board-delegate`(含 S 系列 MCU 开发 + Acore 侧 hbmem/IPC/EtherCAT/PCIe/OTA/VDSP)。
 - **AI 部署**(基于 D-Robotics GitHub 组织仓库文档):`rdk-model-zoo`(现成 BPU 模型 + 逐板型清单)/
   `rdk-embodied-lerobot`(具身 LeRobot/VLA)/ `rdk-llm-deployment`(端侧 LLM/VLM/语音)。
 - **配件**(基于 accessories_doc):`rdk-accessories`(官方双目相机/IMU 模组/扩展板)。
@@ -61,7 +61,10 @@ skills/<name>/
 | `rdk-commands.md` / `linux-commands.md` | RDK 专属命令详表 / Linux 命令索引 | `rdk-command-manual` |
 | `tros-node-catalog.md` | 九大类 TROS 感知节点目录(话题/板型/launch/URL) | `rdk-ros` |
 | `multimedia-pipeline.md` | 编解码规格 / sp_dev API / X 与 S 流水线差异 | `rdk-multimedia` |
-| `s-advanced.md` | S100 家族 Acore 侧:hbmem/IPC/PCIe/EtherCAT/PTP/OTA | `rdk-board-delegate` |
+| `s-advanced.md` | S100 家族 Acore 侧:hbmem/IPC/PCIe/EtherCAT/PTP/OTA/VDSP | `rdk-board-delegate` |
+| `system-config.md` | 系统配置详表:联网/config.txt/调频温控/自启/文件共享/srpi-config | `rdk-system-config` |
+| `board-inference-api.md` | 板端推理编程 API:pyeasy_dnn / hbm_runtime / libdnn | `rdk-device` |
+| `app-cases.md` | 官方端到端案例:AMR 自主导航 / CNN 巡线小车 | `rdk-ros` |
 
 ## 与 Moss / RDK Studio 的关系
 
