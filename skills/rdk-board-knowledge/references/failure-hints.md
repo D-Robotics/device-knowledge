@@ -349,3 +349,27 @@
 匹配:`short_url.*missing|uploads\.json.*csrf|CSRF.*invalid`
 
 **建议**:论坛上传 CSRF/会话失效 — 调用 `forum_drobotics_auth_status` 重新拉取 Cookie；若仍失败，让用户重新登录主账号或在对话提供凭据
+
+### 56. 现象(S 系列工具链)
+
+匹配:`hb_mapper.*not found|command not found.*hb_mapper`(在 S100/S100P/S600 上)
+
+**建议**:S 系列(Nash)工具链命令是 **`hb_compile`**(产 `.hbm`),不是 X 系列的 `hb_mapper`(产 `.bin`)。例:`hb_compile --model x.onnx --march nash-e`。转换在主机 Docker(天工开物/OE)里跑,板上只有 `hbm_runtime`。详见 rdk-device 的 toolchain-workflow。
+
+### 57. 现象(S 系列模型)
+
+匹配:`No such file.*\.hbm|hbm_runtime.*not found|HB_HBMRuntime|invalid march|march.*nash`
+
+**建议**:① 找不到 `.hbm` → S100/S100P/S600 模型是 `.hbm`(非 `.bin`),`find / -name "*.hbm"` 定位,或从 `rdk_model_zoo_s`(s100 分支)取预编译。② `hbm_runtime` 缺失 → `sudo apt-get install hobot-dnn` 后 `pip install /tmp/hbm_runtime-*.whl`。③ `march` 错 → **S100=`nash-e`、S100P=`nash-m`**(官方 FAQ),S600=`nash`;别套 X 系列 `bayes-e`/`bernoulli2`。
+
+### 58. 现象(S 系列 TROS 版本)
+
+匹配:`/opt/tros/humble.*No such file`(在 RDK S600 上)
+
+**建议**:**RDK S600 是 Ubuntu 24.04 / ROS2 Jazzy**,TROS 在 `/opt/tros/jazzy/`、`apt` 包名 `tros-jazzy-*`;别在 S600 上找 humble(那是 X3/X5/Ultra/S100/S100P 的)。
+
+### 59. 现象(S100/S600 连不上板)
+
+匹配:`No route to host|Connection timed out`(首次连 S100/S600)
+
+**建议**:S100/S600 双千兆口中 **eth1 出厂固定静态 IP `192.168.127.10`**(管理口),eth0 走 DHCP。连不上先把电脑网卡设同网段后 `ssh root@192.168.127.10`(或 `sunrise@...`)。

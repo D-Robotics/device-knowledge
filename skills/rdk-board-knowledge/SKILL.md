@@ -14,7 +14,7 @@ description: 当需要确认 RDK 板型运行基线、排查常见报错(摄像�
 先用板上事实确认基线,再按"现象→建议→文档"排障;遇到误区先一句澄清再继续。
 
 **遇到以下用户误区时，先用一句话澄清再继续**（不要顺着错误前提走）：
-- "X3 的 .bin 拷 X5 能跑" → ❌ 不能，BPU 架构不同（Bernoulli2 vs Bayes），必须用对应工具链重编；跨 Ultra 仅 X5→Ultra 单向兼容且需性能验证。
+- "X3 的 .bin 拷 X5 能跑" → ❌ 不能，BPU 架构不同（Bernoulli2 vs Bayes），必须用对应工具链重编；X5 与 Ultra 同 Bayes 架构（march 同 `bayes-e`），`.bin` 原则上可互跑，但 Ultra 算力/内存更高，跨板务必各自做性能/精度验证。S100/S100P 是 Nash 架构、产物 `.hbm`，与 X 系列互不通用。
 - "`hb_mapper` 在板上 apt install" → ❌ 工具链在**主机 Docker**里用，板上只装 runtime；用户找不到就是正常的。
 - "RDK Studio = 板子" → ❌ RDK Studio 是**桌面 IDE**（你就在里面）；板子是 RDK X3/X5/S100 等硬件，靠 SSH/Studio 协作。
 - "RDK 是地平线的" → 现品牌是 D-Robotics；旧资料里的 "Horizon/地平线" 指同一条产品线，口径统一回 D-Robotics。
@@ -35,11 +35,13 @@ description: 当需要确认 RDK 板型运行基线、排查常见报错(摄像�
 **步骤**:
 
 1. **读取板型标识** `[safe]`
-   先用板上事实确认硬件，不要根据用户描述猜测 X3/X5/Ultra/S100。
+   先用板上事实确认硬件，不要根据用户描述猜测 X3/X5/Ultra/S100/S600。
    ```bash
-   cat /sys/class/socinfo/board_id
+   cat /sys/class/socinfo/board_id      # X5/S 系列(srpi-config、hobot_mipi_cam 都读它)
+   cat /sys/class/socinfo/som_name      # X3 文档用 som_name;两者按板型择一
+   cat /proc/device-tree/model          # 板型字面;再不行查 /etc/board_config.json
    ```
-   预期:输出能映射到 X3、X5、Ultra、S100 或 S100P；未知输出需要继续收集日志。
+   预期:输出能映射到 X3、X5、Ultra、S100、S100P 或 S600；未知输出需要继续收集日志。
 
 2. **读取系统镜像版本** `[safe]`
    记录 OS/RDK 版本，后续包名、TROS 路径和工具链建议都要以版本为前提。
@@ -49,7 +51,7 @@ description: 当需要确认 RDK 板型运行基线、排查常见报错(摄像�
    预期:输出镜像版本；如果文件不存在，改用系统 release 文件和 RDK Studio 设备信息交叉确认。
 
 3. **按板型选择 BPU 监控命令** `[safe]`
-   X3 使用 hrut_smi；X5/Ultra 使用 hrut_bpuprofile -b 0；S100/S100P 使用 hrut_bpuprofile。
+   X3 使用 hrut_smi；X5/Ultra 使用 hrut_bpuprofile -b 0；S100/S100P/S600 使用 hrut_bpuprofile；通用兜底 `cat /sys/devices/system/bpu/bpu0/ratio`。
    ```bash
    hrut_bpuprofile -b 0
    ```
@@ -72,7 +74,7 @@ description: 当需要确认 RDK 板型运行基线、排查常见报错(摄像�
 
 - **摄像头**(`SIGABRT`/`exit code -6`/`No image data`/`VIDIOC_*`/`timeout`):USB 摄像头 99% 是 YUYV→改 MJPEG,分辨率先用 640x480;`v4l2-ctl -d /dev/video0 --list-formats-ext` 查支持档位,宽高/fps 必须精确匹配。
 - **模型/BPU**(`No such file *.bin/.hbm`/`OOM`/`model incompatible`/`unsupported op`):模型路径用 `find /opt/tros -name "*.bin"` 定位别靠相对路径;OOM 看 `cat /sys/devices/system/bpu/bpu0/ratio && free -h`;跨架构(X3=Bernoulli2 / X5·Ultra=Bayes / S100=Nash)hbm/bin 不通用,须用对应工具链重编。
-- **TROS/ROS2**(`command not found ros2`/`tros 包找不到`/`NO_PUBKEY`/`setup.bash No such file`):先 `source /opt/tros/humble/setup.bash`(TROS 默认 humble);APT 公钥失效按官方 TROS 文档重配 keyring;S100 部分镜像需 `su - sunrise` 再 source。
+- **TROS/ROS2**(`command not found ros2`/`tros 包找不到`/`NO_PUBKEY`/`setup.bash No such file`):X3/X5/Ultra/S100/S100P 先 `source /opt/tros/humble/setup.bash`(humble);**RDK S600 是 Jazzy → `source /opt/tros/jazzy/setup.bash`**(Ubuntu 24.04,包名 `tros-jazzy-*`,别找 humble);APT 公钥失效按官方 TROS 文档重配 keyring;S100/S600 部分镜像需 `su - sunrise` 再 source。
 - **GPIO/I2C/串口/PWM**(`Permission denied`/`gpiochip not found`/`/dev/i2c`/`ttyUSB`):引脚缺总线多半未做 Pinmux 复用;gpiochip 编号各板不同别照抄 RPi,用 `gpiofind`;串口权限把用户加入 `dialout` 组后重新登录。
 - **供电/挂死**(`under-voltage`/`throttled`/`kernel panic`/`System halted`):首查供电(5V/3A 起,Ultra·S100 推荐 5V/5A),再查温度(>85°C 需散热),用官方电源避免 USB-A→USB-C 转接。
 - **网络/SSH**(`Connection refused`/`timeout`/`Host key verification failed`):`ip addr`+`ping`;重刷系统后 `ssh-keygen -R <ip>` 清旧密钥。
@@ -96,5 +98,6 @@ description: 当需要确认 RDK 板型运行基线、排查常见报错(摄像�
 ## 参考资料
 
 - [常见故障速查(55 条)](references/failure-hints.md)（含摄像头/模型/TROS/GPIO/供电/网络/设备识别等子类;遇具体报错时查）
+- [官方 FAQ 速查(按主题分组)](references/official-faq.md)（D-Robotics 官方 rdk_doc/rdk_s_doc 的 08_FAQ 全文要点 + 官方 URL + 覆盖板型;S 系列特有条目单列。failure-hints 是经验性"现象→建议",这里是官方"问题→答案要点",互补使用）
 - [诊断与系统命令](references/diagnostic-commands.md)
 - [硬件与系统参考(详细章节)](references/hardware-notes.md)

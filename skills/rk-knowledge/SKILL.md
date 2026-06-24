@@ -26,7 +26,7 @@ RK3588/RKNN 起步知识:RKNN 工具链、NPU 与板端推理要点。
 | 命令模式 | 说明 | 风险 | 适用板型 |
 | --- | --- | --- | --- |
 | `dmesg\s*\\|\s*grep\s+(-i\s+)?rknpu` | 查看 Rockchip NPU 驱动/运行时内核日志 | safe | radxa-rock-5b/radxa-rock-5-itx/orange-pi-5-plus/firefly-roc-rk3588s-pc |
-| `pip\s+install\s+.*rknn\|rknn[-_]toolkit` | 安装 RKNN Toolkit / 运行时包 | moderate | radxa-rock-5b/radxa-rock-5-itx/orange-pi-5-plus/firefly-roc-rk3588s-pc |
+| `pip\s+install\s+.*rknn\|rknn[-_]toolkit` | 安装 RKNN Toolkit 2(PC 端转换)/ rknn_toolkit_lite2(板端推理)。**v2.3.2 起官方 wheel 已上 PyPI**,可直接 `pip install rknn-toolkit2`(含 x86_64/aarch64);**关键是版本要与板端 `librknnrt` 匹配**——不匹配会触发下方 version mismatch,此时改从官方 RKNPU2_SDK 的 `packages/` 取与板端对应版本的 `.whl` | moderate | radxa-rock-5b/radxa-rock-5-itx/orange-pi-5-plus/firefly-roc-rk3588s-pc |
 
 ## 常见故障
 

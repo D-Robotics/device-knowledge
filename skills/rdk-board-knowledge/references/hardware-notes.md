@@ -25,7 +25,7 @@
 | "Ultra 就是 X5 超频版" | 不是。Ultra 是同 Bayes 架构但**算力×9.6**、8GB RAM、主动散热专设的工业/科研板；`.bin` 多数互通但 X5 上测试过不代表 Ultra 能跑满 |
 | "`hb_mapper` 我在板子上 `apt install` 不到" | 对。工具链在**主机 Docker**里运行，不在板上；板上只装 runtime（`hobot-dnn`、`bpu_infer_lib_*`）|
 | "S100 = Jetson Orin 国产替代" | 定位接近但架构差异大——Jetson 走 GPU + CUDA，S100 走 BPU + ONNX 工具链；代码**不能直接迁移**，需要重新走模型转换 |
-| "RDK X5 的默认用户是 sunrise" | **X5 默认用户是 `root`/`root`**；`sunrise` 是 **X3** 的惯例 |
+| "X5/S 系列只有 root / sunrise 是 X3 专属" | ❌ 官方 RDK 镜像普遍**同时提供 `sunrise/sunrise`(普通)+ `root/root`(超级)**两个账户(X5、S100、S600 都如此,见官方 FAQ Q13 与配置向导)。`sunrise` 不是 X3 专属;X3 主登录用 sunrise,RDK Studio 的 SSH 通道则多走 root |
 | "模型放 `/opt/hobot/model/rdkx5/` 吧" | 实际路径是 **`/opt/hobot/model/x5/`**（目录名不含 `rdk` 前缀）；X3 则在 `/opt/hobot/model/rdkx3/`（**有** `rdk` 前缀，历史原因，确实不对称）|
 | "X5 也能用 `hrut_smi` / `bputop`" | **不能**。RDK OS 3.x 的 X5 镜像只装了 `hrut_bpuprofile` + `hrut_somstatus`；`hrut_smi` 主要在 X3，`bputop` 主要在 X3/Ultra。所有板通用的兜底是 `cat /sys/devices/system/bpu/bpu0/ratio` |
 | "RDK OS 1.x 的机器 `apt upgrade` 到 3.x" | **不行**。1.x 到 2.x/3.x 必须**重刷镜像**；同主版本升级也要按官方流程评估与备份，Studio 不自动跑整机 `apt upgrade` |

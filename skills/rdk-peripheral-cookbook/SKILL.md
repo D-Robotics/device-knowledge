@@ -1,6 +1,6 @@
 ---
 name: rdk-peripheral-cookbook
-description: 当用户要在 RDK 上驱动 GPIO/I2C/SPI/UART、PWM 舵机、直流/步进/无刷电机、LED/WS2812、音频(ALSA),或做跨平台引脚对照、libgpiod、零驱动诊断时使用。本 skill 给外设实操驱动;GPIO 引脚事实/编号差异走 rdk-hardware,设备报错排查走 rdk-board-knowledge。
+description: 当用户要在 RDK 上驱动 GPIO/I2C/SPI/UART、PWM 舵机、直流/步进/无刷电机、LED/WS2812、音频(ALSA),或做外设接线时的跨平台引脚参照、libgpiod、零驱动诊断时使用。本 skill 给外设实操驱动;纯 GPIO 引脚编号事实/各板差异走 rdk-hardware(本 skill 接线时引用它),设备报错排查走 rdk-board-knowledge。
 ---
 
 # RDK 外设驱动食谱
@@ -17,7 +17,7 @@ description: 当用户要在 RDK 上驱动 GPIO/I2C/SPI/UART、PWM 舵机、直�
 
 - **舵机/电机/WS2812 灯带绝不从 40PIN Pin 2/4 取 5V**——哪怕单个 SG90,堵转/满载电流可拉低板子 5V 导致重启。一律外接 5V/6V 电源,信号线与板子**共 GND**。
 - I2C 先 `i2cdetect -y <bus>` 确认地址出现再读写;PWM 先低频低占空比试探;改动持久化内核/启动链(`/boot`、设备树、MCU 固件)风险最高,RDK 上非必要不碰。
-- RDK 特有坑:同一 40PIN 引脚可能默认配成 GPIO,需先用 Hobot pinmux 脚本切到 I2C/PWM/UART 模式,`/dev/i2c-X`、`pwmchip` 才出现。
+- RDK 特有坑:同一 40PIN 引脚可能默认配成 GPIO,需先用 **`sudo srpi-config` → `3 Interface Options` → 总线配置**(或板上 `/app/40pin_samples/` 脚本)切到 I2C/PWM/UART 模式,`/dev/i2c-X`、`pwmchip` 才出现。S100 上 I2C5/UART2 还要拨**拨码开关**二选一。**RDK S600 没有标准 40PIN**(自锁口、1.8V 电平),本食谱的 40PIN 接法不适用 S600,引脚事实见 rdk-hardware。
 
 ## 外设范式决策速查
 

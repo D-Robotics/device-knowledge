@@ -25,10 +25,15 @@ skills/<name>/
 
 ## Skill 划分与 references 分层
 
-11 个 skill 覆盖 RDK 核心(7)+ 设备族 starter(3)+ 桌面端开发(1):
+19 个 skill 覆盖 RDK 核心(8)+ AI 部署(3)+ 配件(1)+ 导航/手册(3)+ 设备族 starter(3)+ 桌面端开发(1):
 
-- **RDK 核心**:`rdk-ecosystem` / `rdk-hardware` / `rdk-board-knowledge` / `rdk-device` / `rdk-ros`
-  / `rdk-peripheral-cookbook` / `rdk-board-delegate`。
+- **RDK 核心**:`rdk-ecosystem` / `rdk-hardware` / `rdk-board-knowledge` / `rdk-device` / `rdk-ros`(附 TROS 节点目录)
+  / `rdk-multimedia`(硬件编解码/相机流水线)/ `rdk-peripheral-cookbook` / `rdk-board-delegate`(含 S 系列 MCU 开发 + Acore 侧 hbmem/IPC/EtherCAT/PCIe/OTA)。
+- **AI 部署**(基于 D-Robotics GitHub 组织仓库文档):`rdk-model-zoo`(现成 BPU 模型 + 逐板型清单)/
+  `rdk-embodied-lerobot`(具身 LeRobot/VLA)/ `rdk-llm-deployment`(端侧 LLM/VLM/语音)。
+- **配件**(基于 accessories_doc):`rdk-accessories`(官方双目相机/IMU 模组/扩展板)。
+- **导航/手册**(基于组织仓库结构与官方 doc 仓):`rdk-source-map`(GitHub 仓库地图 + 源码构建)/
+  `rdk-doc-finder`(官方文档站章节定位)/ `rdk-command-manual`(RDK 专属命令手册)。
 - **设备族**:`jetson-knowledge` / `rpi-knowledge` / `rk-knowledge`。
 - **桌面端**:`host-software-dev`(RDK Studio 客户端本体工程)。
 
@@ -40,8 +45,23 @@ skills/<name>/
 | `failure-hints.md` | 55 条"现象→建议→文档"故障速查 | `rdk-board-knowledge` |
 | `diagnostic-commands.md` | 诊断/系统/工具链命令表 | `rdk-board-knowledge` |
 | `ros-commands.md` / `camera-commands.md` / `gpio-commands.md` | 分类命令表 | `rdk-ros` / `rdk-device` / `rdk-peripheral-cookbook` |
-| `board-specs.md` | 5 款 RDK 板型规格对照(含探测标识) | `rdk-hardware` |
+| `board-specs.md` | 6 款 RDK 板型规格对照(X3/X5/Ultra/S100/S100P/S600,含探测标识) | `rdk-hardware` |
 | `official-docs.md` | 官方资料导航(按主题分组) | `rdk-ecosystem` |
+| `model-zoo-catalog.md` | Model Zoo 分支策略、模型类别、运行时/格式对照 | `rdk-model-zoo` |
+| `lerobot-workflow.md` | LeRobot ACT 导出/编译/板端部署、Pi0 VLA 规格 | `rdk-embodied-lerobot` |
+| `llm-voice-stack.md` | llama.cpp/GGUF 模型清单、ASR/TTS/小智 命令 | `rdk-llm-deployment` |
+| `repo-families.md` | 组织 327+ 仓 12 类家族地图 + 命名识别速查 | `rdk-source-map` |
+| `os-image-build.md` | 从源码构建 OS 镜像(repo/manifest/rdk-gen)与 TROS(vcstool) | `rdk-source-map` |
+| `accessories-catalog.md` | 官方配件总表:双目相机/IMU 模组/扩展板规格、线序、SDK | `rdk-accessories` |
+| `mcu-development.md` | S 系列 MCU(R52+)固件开发:编译/remoteproc/IPC/调试 | `rdk-board-delegate` |
+| `toolchain-workflow.md` | X hb_mapper→.bin vs S hb_compile→.hbm 工具链对照 | `rdk-device` |
+| `per-board-model-catalog.md` | 各板逐型号模型实测(精度/帧率/分支路径) | `rdk-model-zoo` |
+| `official-faq.md` | 官方 FAQ 速查(08_FAQ 全文要点 + URL + 板型) | `rdk-board-knowledge` |
+| `doc-map.md` | 全量主题 → 官方文档站 URL 索引(六站) | `rdk-doc-finder` |
+| `rdk-commands.md` / `linux-commands.md` | RDK 专属命令详表 / Linux 命令索引 | `rdk-command-manual` |
+| `tros-node-catalog.md` | 九大类 TROS 感知节点目录(话题/板型/launch/URL) | `rdk-ros` |
+| `multimedia-pipeline.md` | 编解码规格 / sp_dev API / X 与 S 流水线差异 | `rdk-multimedia` |
+| `s-advanced.md` | S100 家族 Acore 侧:hbmem/IPC/PCIe/EtherCAT/PTP/OTA | `rdk-board-delegate` |
 
 ## 与 Moss / RDK Studio 的关系
 

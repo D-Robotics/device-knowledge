@@ -20,11 +20,19 @@ D-Robotics RDK 及周边设备(Jetson / 树莓派 / Rockchip)的 **source-backed
 | --- | --- |
 | [`rdk-ecosystem`](skills/rdk-ecosystem/) | RDK 生态、产品选型(买哪块板)、能否跑某模型、与 Jetson/树莓派/RK3588 跨平台对比、LLM/VLM 期待、官方资料来源 |
 | [`rdk-hardware`](skills/rdk-hardware/) | RDK 硬件子系统与系统底座:40PIN GPIO、摄像头、BPU 推理流水线、系统路径、网络、散热、BPU 架构演进、OS 版本线、板型感知 |
-| [`rdk-board-knowledge`](skills/rdk-board-knowledge/) | 板型基线确认、常见报错诊断、高频误区纠正(附 55 条故障速查与诊断命令库) |
+| [`rdk-board-knowledge`](skills/rdk-board-knowledge/) | 板型基线确认、常见报错诊断、高频误区纠正(附 55 条故障速查、诊断命令库与官方 FAQ) |
+| [`rdk-doc-finder`](skills/rdk-doc-finder/) | "去哪查":把任意问题指到官方文档站(rdk_x_doc/rdk_s_doc/tros_doc/model_zoo_doc/rdk_studio_doc/accessories_doc)的章节 + URL,含 URL 推导规则与全量主题索引 |
+| [`rdk-command-manual`](skills/rdk-command-manual/) | 查某条 RDK 专属命令/系统命令的语法/选项/适用板型:hrut_*、srpi-config、rdkos_info、rdk-miniboot-update、devmem 等(命令为锚点) |
+| [`rdk-source-map`](skills/rdk-source-map/) | 在 D-Robotics GitHub 组织(327+ 仓)里定位/区分仓库:某仓是干嘛的/哪层/哪块板、任务该去哪个仓、hobot- vs hobot_、从源码构建 OS 镜像/TROS(repo/manifest/rdk-gen/vcstool) |
 | [`rdk-device`](skills/rdk-device/) | 模型部署闭环(.pt/.onnx→.bin BPU 工具链)、首次开箱联网、摄像头/视觉推理、从 0 到 1 上手 |
-| [`rdk-ros`](skills/rdk-ros/) | TROS/ROS2 环境初始化、ros2 命令、节点排障、包定位、双目深度/Livox 感知节点 |
+| [`rdk-model-zoo`](skills/rdk-model-zoo/) | 取 Model Zoo 现成 BPU 模型(分类/检测/分割/姿态/OCR/多模态)、选对硬件分支、hbm_runtime 运行、预编译 .bin/.hbm 下载、各板逐型号实测清单 |
+| [`rdk-embodied-lerobot`](skills/rdk-embodied-lerobot/) | 具身智能策略部署:LeRobot ACT、VLA(Pi0/openpi)、机械臂动作控制、policy 编译到 BPU(S100/S600) |
+| [`rdk-llm-deployment`](skills/rdk-llm-deployment/) | 端侧 LLM/VLM 对话(llama.cpp BPU、GGUF、InternVL/SmolVLM)、语音助手(小智)、ASR(sensevoice)/TTS 闭环 |
+| [`rdk-ros`](skills/rdk-ros/) | TROS/ROS2 环境初始化、ros2 命令、节点排障、包定位、双目深度/Livox 感知节点(附九大类 TROS 节点目录) |
+| [`rdk-multimedia`](skills/rdk-multimedia/) | 硬件多媒体流水线:H264/H265/JPEG 编解码、VIN/ISP 取流、VPS/PYM 缩放、HDMI 显示,sp_dev / HB_* / MediaCodec 接口(区别于模型推理与 ROS 节点) |
 | [`rdk-peripheral-cookbook`](skills/rdk-peripheral-cookbook/) | 外设驱动食谱:GPIO/I2C/SPI/UART、PWM 舵机、电机、LED/WS2812、音频(ALSA)、跨平台引脚、libgpiod、零驱动诊断 |
-| [`rdk-board-delegate`](skills/rdk-board-delegate/) | 板端委派、OpenClaw 交接信息结构、S100"大小脑异构"(MCU R52+ 实时控制)协同 |
+| [`rdk-accessories`](skills/rdk-accessories/) | D-Robotics 官方成品配件:GS130W/GS130Wi 双目相机、RDK IMU 模组(BMI088)、S100/S600 相机/MCU 端口扩展板——选型/接线/安装/官方 SDK 驱动 |
+| [`rdk-board-delegate`](skills/rdk-board-delegate/) | 板端委派、OpenClaw 交接信息结构、S100/S600"大小脑异构"协同、S 系列 MCU(R52+)固件开发(remoteproc/IPC/编译烧录) |
 | [`jetson-knowledge`](skills/jetson-knowledge/) | NVIDIA Jetson(Orin 系列)生态、选型、JetPack/TensorRT 工具链 |
 | [`rpi-knowledge`](skills/rpi-knowledge/) | 树莓派(Pi 5/4B/CM4)生态、GPIO、libcamera、AI HAT+ |
 | [`rk-knowledge`](skills/rk-knowledge/) | Rockchip RK3588(Rock5 / OrangePi 5)NPU、RKNN 工具链部署 |

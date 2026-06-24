@@ -1,6 +1,6 @@
 ---
 name: rdk-ecosystem
-description: 当用户询问 RDK 产品生态、买哪块板(X3/X5/Ultra/S100/S100P)、能否跑某模型、与 Jetson/树莓派/RK3588 的跨平台对比、LLM/VLM 期待、或去哪找官方资料时使用。跨平台对比以 RDK 为锚点(RDK vs X 选哪个)归本 skill;纯单平台规格/工具链分别走 jetson-knowledge / rpi-knowledge / rk-knowledge;硬件子系统事实走 rdk-hardware;板上部署走 rdk-device。
+description: 当用户询问 RDK 产品生态、买哪块板(X3/X5/Ultra/S100/S100P/S600)、能否跑某模型、与 Jetson/树莓派/RK3588 的跨平台对比、LLM/VLM 期待、或去哪找官方资料时使用。跨平台对比以 RDK 为锚点(RDK vs X 选哪个)归本 skill;纯单平台规格/工具链分别走 jetson-knowledge / rpi-knowledge / rk-knowledge;硬件子系统事实走 rdk-hardware;板上部署走 rdk-device;端侧 LLM/VLM 实际怎么跑走 rdk-llm-deployment;定位 GitHub 仓库/源码导航走 rdk-source-map,官方文档站具体章节定位/给权威 URL 走 rdk-doc-finder,某条命令语法走 rdk-command-manual(本 skill 的官方资料特指生态/选型层面的入口:产品页/Model Zoo/NodeHub/社区)。
 ---
 
 # RDK 生态与产品选型
@@ -17,13 +17,13 @@ description: 当用户询问 RDK 产品生态、买哪块板(X3/X5/Ultra/S100/S1
 - **NodeHub**：developer.d-robotics.cc/en/nodehub — RDK 应用中心
 
 **用户问"买哪块板 / 能不能跑 X"的决策口径**：
-- **一句话推荐**：新手/教学 → X3；机器人视觉主力 → **X5 8GB**；要跑 **LLM/VLM / 实时关节控制** → S100；要更大模型/VLM 或多路 GMSL → S100P（价格和模型清单以官方渠道为准）。
+- **一句话推荐**：新手/教学 → X3；机器人视觉主力 → **X5 8GB**（也能跑 1-2B VLM）；具身/实时关节控制 + 1.5-3B LLM/VLM → S100/S100P；多路 GMSL → S100P；**要顺滑跑 7-8B 大模型 / 顶级算力(560 TOPS) / 双臂具身 / 多路 10GbE → S600（S100P 7B 实测仅 ≈6.7 TPS,偏慢）**（价格和模型清单以官方渠道为准）。
 - **能不能跑 X 的判据**：
-  1) **LLM 对话**：X3 ❌；X5 ⚠️ ≤2B 量化（Qwen2-0.5B 等）；S100 ✅ 7B 级量化；S100P ✅ 更大模型/VLM 原型（以官方清单为准）
+  1) **LLM 对话**：X3 ❌；X5 ⚠️ ≤2B 量化（走 hobot_llamacpp）；S100/S100P ✅ 1.5-3B 流畅、7B 能跑但慢（**S100P 实测 7B q8 ≈ 6.7 TPS**）；**S600 ✅ 才真正顺滑跑 7-8B（Qwen3-8B w4 ≈ 31 TPS）**
   2) **YOLO v5/v8**：X3 仅 v5s；X5 主力（实时）；S100/S100P 高帧率 + YOLO-World
   3) **DOSOD 开放词汇**：X5 ~12 fps；S100 ~45 fps
   4) **多路相机 / GMSL 车规**：仅 S100/S100P（配扩展板）
-  5) **实时关节 / 电机 kHz 回路**：**仅 S100 的 MCU**（R52+）能硬实时；其它板只能 Linux RT 线程，有抖动
+  5) **实时关节 / 电机 kHz 回路**：**S 系列(S100 4×R52+ / S600 6×R52+)的 MCU 域**能硬实时；X 系列只能 Linux RT 线程，有抖动
 - **用户未说板型 / 未连设备**时：先追问一句"你手上是哪块板（X3/X5/S100/P）"，不要盲选 X5 模板回复；已连设备以 `boardPlatform` 字段为准。
 - **价格口径**：价格信息仅作参考区间；具体报价**以淘宝/京东实时页面为准**，不要把参考价当准确值写给用户。
 
@@ -40,16 +40,16 @@ description: 当用户询问 RDK 产品生态、买哪块板(X3/X5/Ultra/S100/S1
 - **不确定 / 争议**（如精确 FPS 基准）：直说"看具体模型和版本，官方对比页的数字要配合自己测试"；不要把某一篇博客的数字当权威。
 
 **LLM/VLM 在 RDK 上的期待校准**（用户问"能不能跑 DeepSeek / Qwen / Llama"时反复发生）：
-- **分档现实**（不要含糊）：X3 ❌；X5 4GB ≤1B 玩具级；X5 8GB ≤2B 可用；**S100 (12GB) 是 7B 级量化起点**；S100P (24GB) 适合更大模型/VLM 原型，具体上限以官方清单为准。
-- **关键告警**：用户装 **Ollama / llama.cpp** 原生跑 GGUF 时，**模型走 CPU，BPU 完全没用上**，X5 跑 7B 会比桌面 CPU 还慢。想用 BPU 走 `tros-humble-hobot-llm` / `tros-humble-hobot-llamacpp` 这两个官方 ROS2 节点。
+- **分档现实**（用 model_zoo_doc 官方实测,不要含糊）：X3 ❌；X5 4GB ≤1B 玩具级；X5 8GB ≤2B 可用（且**能跑 VLM**,见下）；**S100/S100P：1.5B 流畅(S100P q4≈39 / q8≈27 TPS)、7B 能跑但慢(q8≈6.7 TPS,7.4GB)**；**S600（32/64GB,560 TOPS）才是 7-8B 顺滑档(Qwen3-8B w4≈31 TPS、4B≈46、1.5B≈92)**——要端侧大模型对话首选 S600。
+- **关键告警**：用户装 **Ollama / llama.cpp** 原生跑 GGUF 时，**模型走 CPU，BPU 完全没用上**，X5 跑 7B 会比桌面 CPU 还慢。想用 BPU：**X5/S100 优先 `tros-humble-hobot-llamacpp`**（llama.cpp + GGUF-BPU 当前主路径），`hobot_llm` 是旧路径(主要面向 X3 4GB);落地命令走 rdk-llm-deployment。
 - **"能跑" ≠ "好用"**：CSDN 社区博客原话"只能当玩具测试着玩，不太能解决大问题"—— 如实转述这种现实反馈，别给用户画饼。
 - **实用建议**：想做"AI 对话机器人"又买的是 X5 → 推荐 **云 API（OpenAI / 通义 / DeepSeek API）+ 板上做 TTS/STT/唤醒词** 的混合架构，比端侧硬塞 7B 体验好 10 倍。
-- **VLM**：X5 基本跑不动；**S100 起步**才有实用价值，NodeHub 上的 VLM demo 基本都要 S100。
+- **VLM**：**X5 现已官方支持端侧 VLM**（hobot_llamacpp 跑 InternVL2.5-1B、InternVL3-1B/2B、SmolVLM2-256M/500M 的 BPU 量化版,X5 InternVL2.5-1B 解码 ≈51.6ms/token）；S100/S100P 同款 + `.hbm` 编码器、可上 InternVL3-8B；落地走 rdk-llm-deployment。
 
 **RDK 资料三层来源（优先级递减）**：
-1. **板上实际**：`apt show tros-humble-<pkg>` / `dpkg -l | grep <pkg>` / `find /opt/tros -name "*.launch.py"` / `ros2 pkg prefix <pkg>`，永远是真相
+1. **板上实际**：`apt show tros-humble-<pkg>` / `dpkg -l | grep <pkg>` / `find /opt/tros -name "*launch.py"`（通配 `_launch.py` 与 `.launch.py`）/ `ros2 pkg prefix <pkg>`，永远是真相
 2. **官方文档**：developer.d-robotics.cc/rdk_doc（用 `rdk_doc_search_local` 优先命中本地缓存，再 `web_fetch` 核对最新）
-3. **GitHub 源码**：github.com/D-Robotics/<repo>（用 `rdk-github-navigator` 技能定位仓库，再拉 raw 文件）
+3. **GitHub 源码**：github.com/D-Robotics/<repo>（用 `rdk-source-map` 技能定位仓库——D-Robotics 327+ 仓库地图，再拉 raw 文件）
 三方一致再回；不一致**以板上实际为准**，文档/GitHub 差异作为「可能版本不同」提示用户。
 社区/踩坑案例去 developer.d-robotics.cc/forum 或 forum.d-robotics.cc（`forum_drobotics_search`）。
 

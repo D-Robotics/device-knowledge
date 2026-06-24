@@ -47,11 +47,12 @@
 | RPi | I2C1（Pin3/5） | `/dev/i2c-1` | `raspi-config` → Interface → I2C |
 | Jetson Orin Nano | I2C1（Pin3/5）、I2C8（Pin27/28） | `/dev/i2c-7`（Orin 实际编号）| 默认开 |
 | RK3588 | I2C3/7/8 对外 | `/dev/i2c-3` 等 | 需 `overlay` 使能 |
-| **RDK X3** | 2 路 | `/dev/i2c-0`, `/dev/i2c-1` | 引脚复用，用 `/app/40pin_samples/config_40pin_pinmux.py` 切 |
-| **RDK X5** | 3 路 | `/dev/i2c-0/1/2` | 同上 |
-| **RDK S100** | 4 路 | `/dev/i2c-0..3` | 同上 |
+| **RDK X3** | 40PIN 实际 **2 路**(I2C0 Pin3/5) | `/dev/i2c-0/1` | 用 `srpi-config` 切复用 |
+| **RDK X5** | 40PIN 实际 **2 路**(I2C5 Pin3/5 + I2C0 Pin27/28) | `/dev/i2c-*` 系统列更多 | 同上;注:旧表"3路"是系统级控制器数 |
+| **RDK S100** | 40PIN 实际 **2 路**(I2C5 Pin3/5 + I2C4 Pin27/28) | `/dev/i2c-0..5` | I2C5 与 UART2 经**拨码开关**二选一;"4路"是 SoC 级 |
+| **RDK S600** | **无标准 40PIN**(自锁口,1.8V) | — | 数字 IO 走 10/12/14-pin 自锁口,见 rdk-hardware |
 
-> **RDK 特有坑**：同一 40PIN 位置的引脚可能被默认配成 GPIO，需先用 Hobot pinmux 脚本切到 I2C 模式，`/dev/i2c-X` 才会出现。排查顺序：`ls /dev/i2c-*` → 不见想要的总线 → 跑 pinmux 脚本 → 再看。
+> **RDK 特有坑**：① 同一 40PIN 引脚可能默认配成 GPIO,先用 **`sudo srpi-config` → `3 Interface Options` → 总线配置**(或板上 `/app/40pin_samples/` 脚本)切到 I2C/SPI/UART/PWM 模式,`/dev/i2c-X`、`pwmchip` 才出现。② 上表 RDK 行是 **40PIN 对外实际可用数**;SoC 级总线更多(在 MCU/相机扩展口上)。排查:`ls /dev/i2c-*` → 不见想要的总线 → 跑 srpi-config/脚本 → 再看。
 
 **PWM 路数与 `pwmchip` 路径对照（舵机 / 电机调速命门）**：
 
@@ -60,9 +61,9 @@
 | RPi | 2（PWM0 / PWM1） | `/sys/class/pwm/pwmchip0/pwm{0,1}/` | `dtoverlay=pwm-2chan` |
 | Jetson Orin Nano | 3 | `/sys/class/pwm/pwmchip*/` | **必须先 `sudo /opt/nvidia/jetson-io/jetson-io.py`** 改 Pinmux |
 | RK3588 | 多路（PWM14/15 常用） | `/sys/class/pwm/pwmchipN/` | 需 overlay |
-| **RDK X3** | 2 | `/sys/class/pwm/pwmchipN/pwmM/` | 切 Pinmux |
-| **RDK X5** | **8（四家里最多）** | 同上 | 切 Pinmux |
-| **RDK S100** | 8 + MCU 侧实时 PWM | MCU 侧走固件 | MCU 侧需烧固件，非 Linux 程序 |
+| **RDK X3** | 40PIN 2 路 | `/sys/class/pwm/pwmchipN/pwmM/` | `srpi-config` 切复用 |
+| **RDK X5** | 40PIN 实际几路(SoC 级 8) | 同上 | `srpi-config` 切复用 |
+| **RDK S100** | 40PIN 实际 **2 路 LPWM**(Pin32/33,48KHz~192MHz) | Hobot.GPIO 控制 | "8 路"是 SoC 级;MCU 域 PWM 走固件不在 40PIN |
 
 > **多舵机（≥3 路）结论**：**四家都推 PCA9685 + I2C**，理由是省板子 PWM / 跨板可移植 / Python 库成熟（见第 25 节）。
 
@@ -73,8 +74,8 @@
 | RPi | Pin 8/10 | `/dev/ttyS0`（mini UART）/ `/dev/ttyAMA0` | 要 `dtoverlay=disable-bt` 让主 UART 出来 |
 | Jetson Orin Nano | Pin 8/10 | `/dev/ttyTHS1` | 默认 root 占用，要 `systemctl disable nvgetty` |
 | RK3588 | Pin 8/10 | `/dev/ttyS0/3` | 需 overlay |
-| **RDK X5** | 5 路 | `/dev/ttyS0..4` 或 `/dev/ttyHS*` | **`ttyS` 普通串口 / `ttyHS` 高速串口**，接线时需确认 |
-| **RDK S100** | 6 路 + **独立 MCU Domain UART 调试口** | 同上 | Main / MCU 两个调试口**别弄混**（见第 17 节）|
+| **RDK X5** | 40PIN 实际 **1 路**(UART1 Pin8/10,`/dev/ttyS1`) | `ttyS0` 是系统调试口 | "5 路"是 SoC 级;`ttyS` 普通 / `ttyHS` 高速 |
+| **RDK S100** | 40PIN 实际 **1 路**(UART2 Pin8/10,默认未使能,与 I2C5 拨码复用) + **独立 MCU Domain UART 调试口** | 同上 | "6 路"是 SoC 级;Main/MCU 两调试口别弄混(见 MCU 章节)|
 
 > **万能兜底**：USB 转 TTL（`/dev/ttyUSB0`）跨所有平台**一样用**；Dynamixel / Feetech 总线舵机、GPS、LoRa 模块几乎都直接 USB 接入，不用纠结板载 UART。
 

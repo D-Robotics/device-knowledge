@@ -4,6 +4,8 @@
 
 按主题分组的官方文档/资料索引,可配合 web_fetch 核对最新版本。
 
+> **文档站已拆分(2026-06)**:官方把合并仓 `rdk_doc` 拆成独立站——X 系列 → `rdk_x_doc`、S 系列 → `rdk_s_doc`、TROS → `tros_doc`、Model Zoo → `model_zoo_doc`、RDK Studio → `rdk_studio_doc`、配件 → `accessories_doc`。下面的 `developer.d-robotics.cc/rdk_doc/...` 链接仍可访问(顶部带"已迁移"横幅)。**要按问题精准定位到新站的哪一章/给权威 URL,用 skill `rdk-doc-finder`(含全量主题→URL 索引与 URL 推导规则)。**
+
 ## getting-started
 
 - [RDK X5 快速上手](https://developer.d-robotics.cc/rdk_doc/Quick_start/hardware_introduction/rdk_x5)
@@ -92,7 +94,7 @@
 - [NodeHub 应用中心](https://developer.d-robotics.cc/en/nodehub)
 - [开发者社区论坛](https://developer.d-robotics.cc/forum)
 - [GitHub D-Robotics 仓库](https://github.com/D-Robotics)
-- [Model Zoo (X3/X5/Ultra · Bayes)](https://github.com/D-Robotics/rdk_model_zoo)
+- [Model Zoo (X3 · Bernoulli2 / X5 · Ultra · Bayes)](https://github.com/D-Robotics/rdk_model_zoo)
 - [Model Zoo (S100/S100P · Nash)](https://github.com/D-Robotics/rdk_model_zoo_s)
 - [RDK 文档源码](https://github.com/D-Robotics/rdk_doc)
 - [系统镜像下载清单](https://github.com/D-Robotics/system_download)
