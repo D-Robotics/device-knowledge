@@ -1,0 +1,68 @@
+{
+  "skill_name": "rdk-device",
+  "description": "Test prompts that verify rdk-device triggers and produces correct, board-aware deployment guidance. Prompts are written the way a real RDK developer would phrase them (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "pt-slow-is-cpu-path",
+      "prompt": "我把训练好的 yolov5 .pt 拷到 RDK X5 上跑，只有 2 FPS，怎么把帧率提上去？",
+      "expected_output": "Interrupts the FPS-tuning framing, explains a raw .pt runs on CPU (BPU idle), and routes to the conversion loop with the correct X5 params.",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "Explains that a raw .pt/.onnx runs on CPU only and the BPU is not used (so 2 FPS is expected)." },
+        { "id": "1b", "text": "Does NOT suggest threading/resolution tuning as the fix." },
+        { "id": "1c", "text": "Says to convert via hb_mapper to a .bin, with march bayes-e for X5." },
+        { "id": "1d", "text": "Mentions verifying BPU usage (e.g. hrut_bpuprofile) or that conversion runs on an x86 Docker host." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "s600-march-tool",
+      "prompt": "S600 上做模型转换 march 填什么？用哪个命令？",
+      "expected_output": "march=nash-p, tool=hb_compile, artifact=.hbm, runtime=hbm_runtime.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "States march = nash-p for S600." },
+        { "id": "2b", "text": "States the tool is hb_compile (not hb_mapper) and the artifact is .hbm." },
+        { "id": "2c", "text": "Mentions hbm_runtime as the on-board runtime." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "first-boot-onboarding",
+      "prompt": "刚拿到一块 RDK X5，完全没用过，我该怎么开始？",
+      "expected_output": "Walks the first-boot flow (flash, official power, indicator light, srpi-config, IP, SSH, preinstalled demo) without leading with BPU/toolchain.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Does NOT open with BPU architecture or the model toolchain." },
+        { "id": "3b", "text": "Mentions an official power supply requirement (e.g. 5V/5A; laptop USB causes reboots)." },
+        { "id": "3c", "text": "Mentions srpi-config and/or SSH default users (root/root or sunrise/sunrise)." },
+        { "id": "3d", "text": "Points to a preinstalled /app/pydev_demo demo (e.g. the web display sample) to confirm the board works." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "usb-camera-no-image",
+      "prompt": "接了个 USB 摄像头但是没有画面，怎么排查？",
+      "expected_output": "Ordered camera bringup: enumerate devices, list real formats, set MJPEG at a matching resolution, validate before attaching inference.",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "Starts by enumerating devices (ls /dev/video*, lsusb)." },
+        { "id": "4b", "text": "Uses v4l2-ctl --list-formats-ext to find real supported formats/resolutions." },
+        { "id": "4c", "text": "Recommends MJPEG and validating a low resolution (e.g. 640x480) before attaching inference." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "cross-arch-artifact",
+      "prompt": "我有一个在 X5 上转好的 .bin，能直接拷到 S100 上跑吗？",
+      "expected_output": "No — .bin (Bayes) and .hbm (Nash) are not interchangeable; must reconvert with hb_compile/nash-e for S100.",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "Says no — a .bin cannot run on S100." },
+        { "id": "5b", "text": "Explains cross-architecture incompatibility (Bayes .bin vs Nash .hbm)." },
+        { "id": "5c", "text": "Says to reconvert for S100 (hb_compile, march nash-e, produces .hbm)." }
+      ]
+    }
+  ]
+}
