@@ -25,7 +25,7 @@ skills/<name>/
 
 ## Skill 划分与 references 分层
 
-20 个 skill 覆盖 RDK 核心(9)+ AI 部署(3)+ 配件(1)+ 导航/手册(3)+ 设备族 starter(3)+ 桌面端开发(1):
+20 个设备知识 skill 覆盖 RDK 核心(9)+ AI 部署(3)+ 配件(1)+ 导航/手册(3)+ 设备族 starter(3)+ 桌面端开发(1),另收录 2 个 Apache-2.0 通用工具 skill(`skill-creator` / `mcp-builder`,见 [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES.md)):
 
 - **RDK 核心**:`rdk-ecosystem` / `rdk-hardware` / `rdk-board-knowledge` / `rdk-system-config`(系统配置)/ `rdk-device`(附工具链 + 板端推理 API)/ `rdk-ros`(附 TROS 节点目录 + 应用案例)
   / `rdk-multimedia`(硬件编解码/相机流水线)/ `rdk-peripheral-cookbook` / `rdk-board-delegate`(含 S 系列 MCU 开发 + Acore 侧 hbmem/IPC/EtherCAT/PCIe/OTA/VDSP)。

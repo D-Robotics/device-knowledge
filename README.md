@@ -29,6 +29,17 @@ Source-backed knowledge for D-Robotics RDK boards (and Jetson / Raspberry Pi / R
 | [`rk-knowledge`](skills/rk-knowledge/) | Rockchip RK3588 NPU & RKNN · Rockchip RK3588 NPU 与 RKNN |
 | [`host-software-dev`](skills/host-software-dev/) | RDK Studio desktop client dev · RDK Studio 桌面客户端开发 |
 
+## Vendored official skills · 内置官方 skill
+
+General-purpose tooling skills copied unmodified from [anthropics/skills](https://github.com/anthropics/skills) (Apache-2.0), kept here for maintainers. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+从 [anthropics/skills](https://github.com/anthropics/skills) 原样收录的通用工具 skill(Apache-2.0),供维护者使用,详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+| Skill | What it's for · 用途 |
+|-------|----------------------|
+| [`skill-creator`](skills/skill-creator/) | Create / improve / measure skills · 创建 / 改进 / 评测 skill(维护本仓用) |
+| [`mcp-builder`](skills/mcp-builder/) | Build MCP servers · 构建 MCP server(把知识做成 MCP 服务时用) |
+
 ## Add a skill · 新增 skill
 
 A skill is one folder under `skills/<name>/`. Follow the shape of [`rdk-device`](skills/rdk-device/) as the reference template.
