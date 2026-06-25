@@ -218,7 +218,7 @@ print(out[name])
 
 ### 4.2 march 取值
 - X3=`bernoulli2`、RDK Ultra=`bayes`、X5=`bayes-e`(均有官方 doc 出处)。
-- **官方 FAQ 按板型区分 march:Super100(S100)=`nash-e`、Super100P(S100P)=`nash-m`**(BPU 架构名即 march)。示例 `mobilenetv2_config.yaml` 用 `nash-e` 是 S100 的;S100P 改 `nash-m`。S600=`nash`(后缀以工具链最新文档为准)。`bpu_export_config.yaml` 的 `type` 字段可选 `nash-e`/`nash-m`/`nash-p` 即对应不同 SKU。
+- **官方 FAQ 按板型区分 march:Super100(S100)=`nash-e`、Super100P(S100P)=`nash-m`**(BPU 架构名即 march)。示例 `mobilenetv2_config.yaml` 用 `nash-e` 是 S100 的;S100P 改 `nash-m`。**S600=`nash-p`**(已确认:LLM SDK 的 `resolve_model_nash-p.md` 即 S600)。`bpu_export_config.yaml` 的 `type` 字段可选 `nash-e`(S100)/`nash-m`(S100P)/`nash-p`(S600)即对应不同 SKU。
 
 ### 4.3 产物与中间态
 - X:`.bin` + `hb_perf` html;S:`.hbm` + `*_quantized_model.bc`(HBIR,可在 x86 上推理比对)。
