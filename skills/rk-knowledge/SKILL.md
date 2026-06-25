@@ -1,48 +1,122 @@
 ---
 name: rk-knowledge
-description: 当用户询问 Rockchip RK3588 平台(Rock 5B/5 ITX、OrangePi 5 Plus、Firefly)的 NPU、RKNN 工具链部署时使用;本 skill 只讲 RK3588 平台本身,涉及与 RDK 的选型对比参见 rdk-ecosystem。
+description: Rockchip RK35xx single-platform reference — RK3588 / RK3576 NPU specs, the RKNN-Toolkit2 conversion workflow (.onnx → .rknn on an x86 PC), board-side inference with RKNN-Toolkit-Lite2 / librknnrt, multi-core NPU scheduling via core_mask, and the version-mismatch failures that dominate RKNN support. Use whenever someone asks about a Rockchip RK3588/RK3576 SBC (Radxa ROCK 5B/5 ITX, Orange Pi 5, Firefly), its NPU, RKNN model conversion, .rknn deployment, or "RKNN version mismatch / init runtime failed". 触发词:RK3588、RK3576、Rockchip、瑞芯微、ROCK 5B、Orange Pi 5、Firefly RK3588、RKNN、rknn-toolkit2、rknn_toolkit_lite2、librknnrt、.rknn 转换、NPU 几 TOPS、core_mask、三核 NPU、版本不匹配、init runtime failed。Routing — this skill covers the RK35xx platform itself only; RDK-vs-RK3588 / Jetson / Raspberry Pi selection and "买哪个" comparison → rdk-ecosystem (RDK-anchored); Jetson → jetson-knowledge; Raspberry Pi → rpi-knowledge; RKNN-LLM (LLMs on RK35xx) is a separate Rockchip SDK, out of scope here.
 ---
 
-# Rockchip RK3588 知识
+# Rockchip RK35xx Knowledge
 
-> 来源:整理自 Rockchip / Radxa 官方文档与社区实践,逐条保留出处链接;具体规格与版本以官方为准。
+A clean single-platform reference for Rockchip RK35xx AI SBCs (RK3588 and RK3576). What the NPU delivers, how to turn a trained model into a `.rknn`, how to run it on-board, and how to read the version-mismatch errors that cause most RKNN support tickets. **The single most important thing to get right: the PC-side toolkit version and the board-side `librknnrt` version must match, or inference fails or returns garbage — this is the #1 RKNN failure.**
 
-RK3588/RKNN 起步知识:RKNN 工具链、NPU 与板端推理要点。
+> Sources: official Rockchip / airockchip repos — [`airockchip/rknn-toolkit2`](https://github.com/airockchip/rknn-toolkit2) (README, `rknpu2/runtime` C API headers, `rknn-toolkit-lite2` examples, `doc/`), [`airockchip/rknn_model_zoo`](https://github.com/airockchip/rknn_model_zoo), [`airockchip/rknn-llm`](https://github.com/airockchip/rknn-llm), PyPI (`rknn-toolkit2`, `rknn-toolkit-lite2`), and Radxa / Orange Pi / Firefly product docs. Every version, API, and spec below is grounded in those; provenance is noted inline. Specs and "latest version" change — defer to the live repo / PyPI when in doubt.
 
-## RK3588 要点
+## The one rule that matters most: versions must match
 
-- 模型用 **RKNN Toolkit 2** 转为 `.rknn`,板端用 `librknnrt` / `rknn_toolkit_lite2` 推理。
-- NPU 标称 6 TOPS = **三核合计(单核约 2 TOPS)**;多核分配靠 RKNN 的 `core_mask`,是部署时的实际决策点。
-- RKNN 报错先核对系统镜像、内核、NPU runtime(`librknnrt`)与 rknn-toolkit2 版本是否匹配,而非默认模型本身错误。
+The RKNN stack has **two halves that must be the same version**:
 
-## 设备与诊断
+- **PC side** — `rknn-toolkit2` (x86_64 or aarch64 Linux): converts `.onnx`/`.pt` → `.rknn`, runs simulation and accuracy analysis.
+- **Board side** — `librknnrt.so` (C runtime) and/or `rknn_toolkit_lite2` (Python): loads and runs the `.rknn`.
 
-- 常见开发板:Radxa ROCK 5 系列、Orange Pi 5 系列、Firefly ROC-RK3588S-PC 等;典型 RK3588/RK3588S 板卡是通用 Linux SBC。
-- 诊断先用通用只读命令:`uname -a`、`cat /etc/os-release`、`cat /proc/device-tree/model`、`lscpu`、`lsusb`、`dmesg | grep -i rknpu`。
-- NPU 可用性取决于镜像内核驱动、`librknnrt` 与模型转换工具版本。
+If you convert a model with toolkit2 **v2.3.x** but the board ships an older `librknnrt` (e.g. v1.6 / v2.1), the model either fails to load (`rknn_init` error), warns about a version difference, or silently produces wrong outputs. When someone reports *"RKNN init runtime failed / load model failed / version mismatch / 推理结果全是乱的"* — **check the two versions first**, before suspecting the model. Fix by upgrading `librknnrt.so` + the NPU kernel driver on the board to match the toolkit2 version you converted with (or re-convert with the toolkit2 version that matches the board).
 
-## 常用命令
+Confirm the board runtime version: the C API exposes it via `rknn_query(..., RKNN_QUERY_SDK_VERSION, ...)`; the SDK version is also printed when a sample runs. Confirm the PC version with `python3 -c "from rknn.api import RKNN; print(RKNN().get_sdk_version())"` or `pip show rknn-toolkit2`.
 
-| 命令模式 | 说明 | 风险 | 适用板型 |
-| --- | --- | --- | --- |
-| `dmesg\s*\\|\s*grep\s+(-i\s+)?rknpu` | 查看 Rockchip NPU 驱动/运行时内核日志 | safe | radxa-rock-5b/radxa-rock-5-itx/orange-pi-5-plus/firefly-roc-rk3588s-pc |
-| `pip\s+install\s+.*rknn\|rknn[-_]toolkit` | 安装 RKNN Toolkit 2(PC 端转换)/ rknn_toolkit_lite2(板端推理)。**v2.3.2 起官方 wheel 已上 PyPI**,可直接 `pip install rknn-toolkit2`(含 x86_64/aarch64);**关键是版本要与板端 `librknnrt` 匹配**——不匹配会触发下方 version mismatch,此时改从官方 RKNPU2_SDK 的 `packages/` 取与板端对应版本的 `.whl` | moderate | radxa-rock-5b/radxa-rock-5-itx/orange-pi-5-plus/firefly-roc-rk3588s-pc |
+## Platform cheat-sheet (the foundation)
 
-## 常见故障
+Confirm the SoC first (`cat /proc/device-tree/compatible` or `cat /proc/device-tree/model`), then read the row. The NPU core count is what gates `core_mask` scheduling.
 
-- 匹配 `RKNN.*(version|mismatch|init runtime|load model|invalid model)|librknnrt` → RKNN runtime/toolkit 版本不匹配很常见。先核对板端 `librknnrt` / `rknn_toolkit_lite2` 版本,再用匹配的 RKNN Toolkit 2 重新生成 `.rknn` 模型。 (<https://github.com/airockchip/rknn-toolkit2>)
+| SoC | NPU | NPU cores | `core_mask` ceiling | CPU | Process |
+|-----|-----|-----------|---------------------|-----|---------|
+| **RK3588 / RK3588S** | 6 TOPS INT8 | **3 cores** | `NPU_CORE_0_1_2` (all 3) | 4× A76 + 4× A55 | 8nm |
+| **RK3576** | 6 TOPS INT8 (INT4/8/16/FP16/BF16/TF32) | **2 cores** | `NPU_CORE_0_1` (both) | 4× A72 + 4× A53 | 8nm |
 
-## 设备规格
+**The 6 TOPS is the whole NPU, not per core.** On RK3588 that is 3 cores at ~2 TOPS each; a single model runs on one core by default (`NPU_CORE_AUTO`) and only uses the full 6 TOPS if you either split work across cores or run 2–3 model instances pinned to different cores. This per-core-vs-total distinction is the most common spec mistake.
 
-- **Radxa ROCK 5B** (`rock-5b`):Rockchip RK3588 / 6 TOPS / 8GB / rknn
-- **Radxa ROCK 5 ITX** (`rock-5-itx`):Rockchip RK3588 / 6 TOPS / 16GB / rknn
-- **Orange Pi 5 Plus** (`orange-pi-5-plus`):Rockchip RK3588 / 6 TOPS / 16GB / rknn
-- **Firefly ROC-RK3588S-PC** (`firefly-roc-rk3588s-pc`):Rockchip RK3588S / 6 TOPS / 8GB / rknn
+RK3588 vs RK3588S: same NPU/CPU; "S" is the cost-reduced package (fewer PCIe/USB lanes, no second display pipeline). For AI/NPU purposes they are identical.
 
-## 官方资料
+## RKNN software stack (who does what)
 
-- [Radxa ROCK 5B Documentation](https://docs.radxa.com/en/rock5/rock5b/getting-started/introduction)
-- [Radxa ROCK 5 ITX Documentation](https://docs.radxa.com/en/rock5/rock5itx/getting-started/introduction)
-- [Rockchip RKNN Toolkit 2](https://github.com/airockchip/rknn-toolkit2)
-- [Orange Pi 5 Plus Product Page](http://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-5-plus.html)
-- [Firefly ROC-RK3588S-PC Wiki](https://wiki.t-firefly.com/en/ROC-RK3588S-PC/)
+| Component | Runs on | Role | Install |
+|-----------|---------|------|---------|
+| **RKNN-Toolkit2** | x86_64 / aarch64 Linux PC | convert → `.rknn`, simulate, accuracy analysis, perf eval | `pip install rknn-toolkit2` (PyPI, v2.3.x) |
+| **RKNN-Toolkit-Lite2** | the board (aarch64) | Python inference of a `.rknn` | `pip install rknn-toolkit-lite2` (PyPI, aarch64 wheels) |
+| **RKNN Runtime (`librknnrt.so`)** | the board | C/C++ inference (`rknn_api.h`) | ships in the board image / RKNPU2 SDK |
+| **RKNPU kernel driver** | the board | talks to NPU hardware | in the Rockchip kernel; check `dmesg \| grep -i rknpu` |
+
+- **RKNN-Toolkit2 is NOT compatible with the old RKNN-Toolkit** (for RK1808/RV1109/RV1126/RK3399Pro). Do not mix them.
+- Toolkit2 supports **Python 3.6–3.12**. Wheels are published on PyPI **2.2.0, 2.2.1, 2.3.0, 2.3.2** (latest **2.3.2**); the full set (matching the exact board runtime) also lives in the repo's `packages/` and the RKNPU2 SDK.
+- **Supported NPU platforms** (toolkit2 v2.3.2): RK3588, RK3576, RK3566/RK3568, RK3562, RV1103/RV1106, RV1103B/RV1106B, RV1126B, RK2118. This skill focuses on the RK35xx AI SBCs (RK3588/RK3576).
+
+## Workflows
+
+### Workflow 1 — Identify the board and its NPU
+
+1. **SoC:** `cat /proc/device-tree/compatible` (e.g. `rockchip,rk3588`) or `cat /proc/device-tree/model` (e.g. "Radxa ROCK 5B").
+2. **OS / kernel:** `cat /etc/os-release`, `uname -a` — image generation gates which `librknnrt` and driver you have.
+3. **NPU driver present:** `dmesg | grep -i rknpu` (should show the RKNPU kernel driver probing). `lscpu` / `lsusb` for the rest.
+4. Read the cheat-sheet row → know the core count (3 for RK3588, 2 for RK3576) before deciding any `core_mask` strategy.
+
+### Workflow 2 — Convert a model to `.rknn` (PC side, the core loop)
+
+Conversion runs on an **x86_64 (or aarch64) Linux PC**, never as the deployment step on the board. Full command reference: [rknn-toolkit-workflow.md](references/rknn-toolkit-workflow.md).
+
+1. **Install the matching toolkit2** — `pip install rknn-toolkit2`. If the board runtime is older than PyPI's latest, install the wheel that matches the board's `librknnrt` from the repo `packages/` instead, so the two halves line up (see "the one rule").
+2. **Export ONNX correctly** — for YOLO and similar detectors, export from the **airockchip fork** (`airockchip/yolov5`, `airockchip/ultralytics_yolov8`, `airockchip/ultralytics_yolo11`, etc.), which strips post-processing into an RKNN-friendly head. A vanilla ultralytics export converts but is slower / harder to quantize well.
+3. **Convert with the Python API** — `RKNN()` → `config(target_platform='rk3588', ...)` → `load_onnx(...)` → `build(do_quantization=True, dataset='dataset.txt')` (≈ a few hundred calibration images) → `export_rknn('model.rknn')`. `target_platform` must match the board (`rk3588`, `rk3576`, …); a `.rknn` built for one platform will not run on another.
+4. **Verify before deploying** — `rknn.accuracy_analysis(...)` to catch quantization drift, and `rknn.eval_perf()` for on-NPU latency (needs a connected board). For INT8 accuracy loss, try hybrid/mixed quantization or per-channel quant in `config`.
+5. **`rknn_model_zoo`** has a ready convert script per model (`convert.py <onnx> <platform> <dtype> <out.rknn>`) — prefer it over hand-writing the API for the common detectors.
+
+### Workflow 3 — Run the `.rknn` on the board
+
+**Python (RKNN-Toolkit-Lite2):**
+```python
+from rknnlite.api import RKNNLite
+rknn = RKNNLite()
+rknn.load_rknn('model.rknn')
+rknn.init_runtime(core_mask=RKNNLite.NPU_CORE_0)   # or NPU_CORE_AUTO / NPU_CORE_0_1_2
+outputs = rknn.inference(inputs=[img])
+```
+- `core_mask` only matters on RK3576/RK3588 (multi-core). Default `NPU_CORE_AUTO` (=0) lets the runtime pick. To use the full 6 TOPS of an RK3588, run separate model instances pinned to `NPU_CORE_0` / `_1` / `_2`, or use `NPU_CORE_0_1_2` for one large model.
+- C/C++ side mirrors this: `rknn_init` → `rknn_set_core_mask(ctx, RKNN_NPU_CORE_0_1_2)` → `rknn_run`. Header: `rknpu2/runtime/.../rknn_api.h`.
+
+**Diagnose a failing run, in order:**
+1. Versions match? (toolkit2 vs board `librknnrt` — Workflow 0 of debugging; see "the one rule").
+2. NPU driver loaded? `dmesg | grep -i rknpu`.
+3. `target_platform` at convert time == this SoC?
+4. Only then suspect the model / preprocessing (input layout NHWC vs NCHW, mean/std, color order).
+
+### Workflow 4 — Out of scope: LLMs on RK35xx
+
+For large language models on RK35xx, Rockchip ships a **separate SDK, RKNN-LLM** (`airockchip/rknn-llm`, with `rkllm-toolkit` to convert to `.rkllm` and `librkllmrt` to run). It is **not** part of rknn-toolkit2. If the user asks "run Qwen/Llama/DeepSeek on RK3588", point them to RKNN-LLM and note this skill covers the vision/CNN RKNN path. Do not try to push an LLM through rknn-toolkit2.
+
+## Worked examples
+
+**Example 1 — "RKNN init runtime failed / load model 报版本不匹配怎么办?"**
+Lead with the version rule: *"This is almost always a PC-toolkit-vs-board-runtime version gap. Check both: on the PC `pip show rknn-toolkit2`; on the board the `librknnrt.so` version (printed when a sample runs, or via `rknn_query` RKNN_QUERY_SDK_VERSION). Make them match — either re-convert the `.rknn` with the toolkit2 version that matches the board's `librknnrt`, or upgrade `librknnrt.so` + the RKNPU kernel driver on the board to the version you converted with. Only after they match should you suspect the model."* Then point to Workflow 3's diagnosis order.
+
+**Example 2 — "RK3588 不是 6 TOPS 吗,为什么我跑一个模型只用了 1/3?"**
+*"6 TOPS is the whole NPU, which is **3 cores** (~2 TOPS each). One model with the default `NPU_CORE_AUTO` runs on a single core, so you see roughly 1/3. To use all of it: either run 2–3 model instances pinned to `NPU_CORE_0` / `_1` / `_2`, or set `core_mask=NPU_CORE_0_1_2` for a single model that supports multi-core. RK3576 is the same idea but 2 cores."*
+
+**Example 3 — "怎么把我的 YOLOv8 .pt 部署到 Orange Pi 5 (RK3588)?"**
+*"Two stages. PC side: export ONNX from the **airockchip/ultralytics_yolov8** fork (RKNN-friendly head), then `pip install rknn-toolkit2` and convert with `target_platform='rk3588'` and a calibration dataset → `model.rknn`. Board side: `pip install rknn-toolkit-lite2`, then `RKNNLite().load_rknn` + `init_runtime` + `inference`. Make sure the toolkit2 version matches the board's `librknnrt`. The `rknn_model_zoo` has a ready yolov8 convert script."* Route to Workflow 2 then 3.
+
+**Example 4 — "我想在 RK3588 上跑 Qwen 大模型,用 rknn-toolkit2 转吗?"**
+*"No — rknn-toolkit2 is for CNN/vision models. LLMs use Rockchip's separate **RKNN-LLM** SDK (`airockchip/rknn-llm`): `rkllm-toolkit` converts the HF model to `.rkllm`, and `librkllmrt` runs it on the board. That's a different toolchain from everything above."* (Out of scope here; just route.)
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+|---------|------|
+| Quote 6 TOPS as if one model gets it all | 6 TOPS = 3 cores (RK3588) / 2 cores (RK3576); one model on AUTO uses one core |
+| Assume "load model failed" means the model is broken | Check toolkit2 vs board `librknnrt` versions first |
+| Mix RKNN-Toolkit2 with the old RKNN-Toolkit | They are incompatible; RK35xx uses Toolkit2 only |
+| Convert with `target_platform='rk3588'` and run on RK3576 (or vice-versa) | `.rknn` is platform-specific; convert per SoC |
+| Export YOLO from vanilla ultralytics and wonder why it's slow | Export from the airockchip fork (RKNN-optimized head) |
+| Push an LLM through rknn-toolkit2 | Use the separate RKNN-LLM SDK (`.rkllm` / `librkllmrt`) |
+| `pip install rknn-toolkit-lite2` on the x86 PC for conversion | Lite2 is board-side (aarch64) inference; conversion is `rknn-toolkit2` on the PC |
+
+## Reference map
+
+| Read this | When |
+|-----------|------|
+| [rknn-toolkit-workflow.md](references/rknn-toolkit-workflow.md) | Converting / deploying a model — full toolkit2 Python API call sequence, `config`/`build` params, quantization, board-side Lite2 + C API, `core_mask`, version-matching, and the RKNN-LLM out-of-scope note |
+| `scripts/rk_npu_selector.py` | Quick SoC → NPU TOPS / core count / `core_mask` ceiling lookup, so the per-core-vs-total fact never drifts |

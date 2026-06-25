@@ -1,0 +1,61 @@
+{
+  "skill_name": "rdk-doc-finder",
+  "description": "Test prompts that verify rdk-doc-finder triggers on 'where in the official docs is X' questions and routes to the correct split doc-site with a verified URL. Prompts are written the way a real RDK developer would phrase them (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "tros-yolo-location",
+      "prompt": "YOLO 目标检测在官方文档哪里讲？给我一个权威链接。",
+      "expected_output": "Routes to tros_doc (ROS2 function package, not the board manual) and gives the verified boxs/detection/yolo URL.",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "Routes to tros_doc, not rdk_x_doc/rdk_s_doc, because TROS/ROS2 topics live on the TROS site." },
+        { "id": "1b", "text": "Gives the URL https://developer.d-robotics.cc/tros_doc/boxs/detection/yolo (or clearly the boxs/detection/yolo path)." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "ultra-hardware-archive-trap",
+      "prompt": "RDK Ultra 的硬件介绍官方文档在哪看？",
+      "expected_output": "Recognizes Ultra has no page under rdk_x_doc and points to the archived rdk_doc location.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "Does NOT invent an rdk_ultra page under rdk_x_doc (rdk_x_doc only has rdk_x3 / rdk_x5)." },
+        { "id": "2b", "text": "Points to the archived rdk_doc URL https://developer.d-robotics.cc/rdk_doc/Quick_start/hardware_introduction/rdk_ultra and notes it is the legacy/migrated site." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "s100-mcu-ipc",
+      "prompt": "S100 的 MCU IPC 使用指南官方文档在哪个手册？",
+      "expected_output": "Routes to rdk_s_doc (MCU is S-only) and gives the mcu_development/mcu_ipc URL.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Routes to rdk_s_doc and notes MCU chapters exist only on the S site, not the X site." },
+        { "id": "3b", "text": "Gives the URL https://developer.d-robotics.cc/rdk_s_doc/Advanced_development/mcu_development/mcu_ipc (or that exact path)." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "40pin-gpio-prefix-rule",
+      "prompt": "X5 的 40pin GPIO 用法官方文档的链接是什么？",
+      "expected_output": "Produces the 40pin GPIO URL that KEEPS the 01_ prefix, and/or advises verifying it (warns the naive strip would 404).",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "Gives the URL https://developer.d-robotics.cc/rdk_x_doc/Basic_Application/01_40pin_user_sample/gpio, keeping the 01_ prefix." },
+        { "id": "4b", "text": "Notes (or implies) that the 01_40pin_user_sample prefix must be kept / that the derived URL should be verified, because stripping it 404s." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "studio-openclaw-doc",
+      "prompt": "RDK Studio 客户端里 OpenClaw 怎么用，有没有官方文档？",
+      "expected_output": "Routes to rdk_studio_doc and gives the user-guide/openclaw URL.",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "Routes to rdk_studio_doc (the desktop client site), not a board manual." },
+        { "id": "5b", "text": "Gives the URL https://developer.d-robotics.cc/rdk_studio_doc/user-guide/openclaw/overview (or that path)." }
+      ]
+    }
+  ]
+}

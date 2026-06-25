@@ -1,97 +1,112 @@
 ---
 name: rdk-ros
-description: 当涉及 RDK 上的 TROS/ROS2 环境初始化、ros2 命令、节点排障、包定位、或双目深度(hobot_stereonet)/Livox 激光雷达/点云/SLAM 建图等感知节点时使用。摄像头格式/驱动排障走 rdk-device,GPIO/外设驱动走 rdk-peripheral-cookbook。
+description: TROS (TogetheROS.Bot) / ROS2 development on RDK boards — pick the right perception node for a capability (detection, segmentation, body/face/hand, stereo depth, 3D/lidar, VLM/LLM, audio), launch it with the correct platform and topics, debug "ros2 command not found" / package / launch problems, and follow the official end-to-end robot app cases (AMR, line-follower). Use whenever the user is on an RDK board and mentions TROS, ROS2, a perception node, a topic/launch/package, stereo depth, lidar, or a TROS app. 触发词:TROS、ros2 命令找不到、source /opt/tros、jazzy、humble、双目深度、stereonet、激光雷达、livox、点云、SLAM、nav2、人体检测、手势识别、人脸、YOLO 节点、dnn_node_example、hobot_dnn、ai_msgs、hbmem_img、巡线小车、AMR、感知节点用哪个。Routing — camera format/driver bringup (v4l2, MIPI sensor, no image) → rdk-device; GPIO/peripheral wiring → rdk-peripheral-cookbook; converting your own model to .bin/.hbm → rdk-device; ready-made model picking → rdk-model-zoo.
 ---
 
-# RDK TROS/ROS2 开发
+# RDK TROS / ROS2 Development
 
-> 来源:整理自 D-Robotics RDK 官方文档、工具链与社区实践,逐条保留出处链接;由 device-knowledge 知识库忠实转换而来,未改写技术事实。
+TROS (TogetheROS.Bot) is D-Robotics' ROS2 distribution for RDK boards. The single most common situation is **"I want capability X, which node do I run?"** — answer that from the node catalog, with the right **支持平台 (support platform)** and **topics** for the user's board. The second most common is **"ros2: command not found"** — that is almost always a missing `source`, not a broken install.
 
-## 何时用
+> Sources: facts verified against the official **[D-Robotics/tros_doc](https://github.com/D-Robotics/tros_doc)** (`docs/03_boxs/**`, `docs/04_apps/**`, `docs/05_tros_dev/**`) and per-node README support tables, plus **rdk_x_doc** `docs/06_Application_case/{amr,line_follower}.md`. Per-node platform/topic claims are taken from each node's own README, re-checked 2026-06.
 
-RDK 板端 TROS/ROS2 环境初始化、`ros2` 命令报错或排障、定位 ROS2 包/launch/config、或上手双目深度(hobot_stereonet)/Livox 激光雷达等感知节点时。
+## The one rule that matters most
 
-ros2 命令不存在多半是没 source TROS 环境;先确认环境与包存在再执行。
+`ros2` not found, or a TROS package "missing", almost always means the **environment was never sourced** — not a broken install. Source first, then diagnose:
 
-**TROS/ROS2 环境**：
-- `ros2` 命令不存在 → `source /opt/tros/humble/setup.bash`(X3/X5/Ultra/S100/S100P 基于 ROS2 **Humble**，路径 `/opt/tros/humble/`)
-- **RDK S600 是 Ubuntu 24.04 / ROS2 Jazzy** → 用 `source /opt/tros/jazzy/setup.bash`(路径 `/opt/tros/jazzy/`,`apt` 包名 `tros-jazzy-*`);**别在 S600 上找 humble**,反之亦然
-- S100/S600 部分镜像仅 sunrise 用户配了 TROS → `su - sunrise` 再试
-- 自定义包: `colcon build --symlink-install` → `source install/setup.bash`
-- 节点失败: `ros2 run <pkg> <node> --ros-args --log-level debug` 查详细日志
-- 先 `device_exec` 确认包名和文件存在，不要盲猜 launch 文件路径
+- **X3 / X5 / Ultra / S100 / S100P** → `source /opt/tros/humble/setup.bash` (ROS2 **Humble**, Ubuntu 22.04, apt packages `tros-humble-*`).
+- **RDK S600** → `source /opt/tros/jazzy/setup.bash` (ROS2 **Jazzy**, Ubuntu 24.04, apt packages `tros-jazzy-*`). **Never look for `/opt/tros/humble` on an S600**, and never look for `jazzy` on the others.
+- Some S100/S600 images only configured TROS in the **`sunrise`** user's `~/.bashrc`. If `root` can't find `ros2`, `su - sunrise` and retry (the board also ships `root/root` and `sunrise/sunrise`).
 
-**排障速查**：
-- `ros2 pkg list | grep <name>` 确认包是否安装；`ros2 pkg prefix <name>` 查安装路径
-- `ros2 launch <pkg> <launch.py> --show-args` 查看 launch 可用参数
-- `ros2 node list` / `ros2 topic list` 确认节点和话题状态
-- 预装节点在 `/opt/tros/humble/lib/<pkg>/`，模型文件常在包内 `config/` 目录(X3/X5/Ultra 为 `config/*.bin`,S100/S100P 为 `config/*.hbm`)
+## Board → TROS distro cheat-sheet
 
-**感知节点上手要点**(详见 references/hardware-notes.md)：
-- 双目深度(hobot_stereonet)：必须先用棋盘格做双目内/外参标定，生成 `left.yaml`/`right.yaml`/`extrinsics.yaml`，路径在 launch 中指定；左右相机时间戳偏差 > 30ms 显著影响视差精度。
-- Livox 激光雷达(livox_ros_driver2)：必须走有线(Wi-Fi 带宽不够)，网卡 MTU 保持 1500 否则丢包；默认网段 192.168.1.x，按型号选 launch(如 `ros2 launch livox_ros_driver2 msg_HAP_launch.py`)。
-- **想跑某个感知能力但不知道用哪个节点**(检测/分割/人体/人脸/手势/双目深度/3D/激光雷达/语音/VLM…):查 [TROS 功能节点目录](references/tros-node-catalog.md)——按 audio/body/classification/detection/driver/function/generate/segmentation/spatial 九类 + apps 分表,每个节点给「包名/作用/关键订阅话题/关键发布话题/支持板型/最小 launch/官方文档」。话题约定速记:图像输入走 `/image` 或零拷贝 `/hbmem_img`,AI 结果由 `ai_msg_pub_topic_name` 指定,级联节点订阅上游 `/hobot_mono2d_body_detection`;检测/分类/分割多走 `dnn_node_example` + `dnn_example_config_file` 切模型。
+| Board(s) | Ubuntu | ROS2 distro | Setup path | apt prefix | On-board model artifact |
+|----------|--------|-------------|------------|------------|-------------------------|
+| RDK X3 / X3 Module | 20.04 (Foxy) or 22.04 | Foxy / **Humble** | `/opt/tros/humble/` | `tros-humble-*` | `.bin` |
+| RDK X5 / X5 Module | 22.04 | **Humble** | `/opt/tros/humble/` | `tros-humble-*` | `.bin` |
+| RDK Ultra | 22.04 | **Humble** | `/opt/tros/humble/` | `tros-humble-*` | `.bin` |
+| RDK S100 / S100P | 22.04 | **Humble** | `/opt/tros/humble/` | `tros-humble-*` | `.hbm` |
+| RDK S600 | **24.04** | **Jazzy** | `/opt/tros/jazzy/` | `tros-jazzy-*` | `.hbm` |
 
-## 工作流:TROS/ROS2 环境确认与包定位
+The same algorithm ships a **different model file per board** (`.bin` for X-series, `.hbm` for S-series; and within S-series the BPU march differs — **S100 = `nash-e` (`nashe`), S100P = `nash-m` (`nashm`), S600 = `nash-p` (`nashp`)**). Always swap the model filename in `launch` to match the board — see [tros-node-catalog.md](references/tros-node-catalog.md).
 
-**触发场景**:ros2 command not found / TROS 环境 / 找不到 launch / ros2 package / colcon
+## Topic conventions (learn these once, the whole catalog reads easily)
 
-**前置条件**:
-- 已确认设备系统版本和登录用户。
-- 需要执行 ROS2/TROS 节点或定位包资源。
+TROS vision nodes name topics very consistently:
 
-**步骤**:
+- **Image input** — `ros_img_sub_topic_name` (default `/image`, plain ROS2 image) **or** `sharedmem_img_topic_name` (default `/hbmem_img`, zero-copy shared memory; preferred for large frames / low latency). A sensor package (`mipi_cam` / `usb_cam` / `hobot_image_publisher` for file replay) publishes it.
+- **AI result output** — set by each node's `ai_msg_pub_topic_name`, message type usually `ai_msgs::msg::PerceptionTargets`.
+- **Cascaded subscribe** — downstream nodes (hand keypoints, face, reid, SAM) subscribe an upstream detection box via `ai_msg_sub_topic_name`, typically `/hobot_mono2d_body_detection`.
+- **Web visualization** — the `websocket` package subscribes `image_topic` + `smart_topic`; open `http://<board-ip>:8000` in a browser.
 
-1. **加载 TROS 环境** `[safe]`
-   RDK TROS 默认路径通常在 /opt/tros/humble，部分镜像需要切换到配置好的用户。
-   ```bash
-   source /opt/tros/humble/setup.bash
-   ```
-   预期:当前 shell 能找到 ros2 命令。
+## Workflows
 
-2. **验证 ROS2 命令可用** `[safe]`
-   先确认环境变量生效，再继续定位包或 launch。
-   ```bash
-   ros2 pkg list | head
-   ```
-   预期:输出若干 ROS2/TROS 包名。
+### Workflow 1 — Environment confirm & package location
 
-3. **定位目标包前缀** `[safe]`
-   不要猜 launch 文件路径，先让 ros2 告诉你包安装位置。
-   ```bash
-   ros2 pkg prefix <pkg>
-   ```
-   预期:输出目标包路径；找不到时检查包名或安装状态。
+**Use when:** `ros2: command not found`, TROS env, can't find a launch/config, `ros2 pkg`, `colcon`.
 
-4. **查找 launch/config 资源** `[safe]`
-   用 find 在实际安装目录中定位 launch、模型(.bin/.hbm)、yaml 等资源。
-   ```bash
-   find /opt/tros -name "*launch.py"   # 通配 *_launch.py 与 *.launch.py 两种命名(D-Robotics 包多用 _launch.py)
-   ```
-   预期:找到候选 launch 文件后再组织 ros2 launch 命令。
+1. **Source TROS** — `/opt/tros/humble/setup.bash` (or `/opt/tros/jazzy/setup.bash` on S600). If `ros2` still fails, try `su - sunrise` first.
+2. **Verify** — `ros2 pkg list | head` returns ROS2/TROS package names.
+3. **Locate the package, don't guess** — `ros2 pkg prefix <pkg>` gives the install path; if it errors, the package name or install is wrong.
+4. **Find launch/config/model files** — `find /opt/tros -name "*launch.py"`. D-Robotics packages mostly use `*_launch.py` (a few use `*.launch.py`). Preinstalled nodes live in `/opt/tros/humble/lib/<pkg>/` and `share/<pkg>/`; model files sit in the package's `config/` (`*.bin` on X-series, `*.hbm` on S-series).
+5. **Inspect a launch before running** — `ros2 launch <pkg> <launch.py> --show-args`. For a failing node, `ros2 run <pkg> <node> --ros-args --log-level debug`.
 
-**验证**:
-- 节点可执行验证 — `ros2 run <pkg> <node> --ros-args --log-level debug`:节点能启动或给出明确错误；错误应与包路径、参数或硬件资源关联。
-- 构建后环境验证 — `source install/setup.bash && ros2 pkg list | grep <pkg>`:自定义包构建后能被当前 shell 发现。
+Never copy a relative config path between working directories — resolve absolute paths via `ros2 pkg prefix` / `find` on the actual board. Full command table: [ros-commands.md](references/ros-commands.md).
 
-**安全注意**:
-- 不要把相对路径配置直接照搬到不同工作目录；优先使用板端 find/ros2 pkg prefix 得到绝对路径。
+### Workflow 2 — Pick a perception node for a capability
 
-**预期结果**:用户能稳定加载 TROS 环境，定位包资源，并把 launch/节点错误收敛到可诊断范围。
+**Use when:** "I want detection / segmentation / body / face / hand / gesture / stereo depth / 3D / lidar / VLM / audio but don't know which node."
 
-来源:<https://developer.d-robotics.cc/rdk_doc/Robot_development/quick_start/preparation> <https://developer.d-robotics.cc/rdk_doc/Robot_development/quick_start/ros_pkg> <https://github.com/D-Robotics/robot_dev_config>
+1. Open [tros-node-catalog.md](references/tros-node-catalog.md) and find the capability's category (audio / body / classification / detection / segmentation / spatial / driver / function / generate, plus `apps`).
+2. **Check the 支持平台 column against the user's board first** — many nodes are X5-only or S100-only. Suggesting an S100-only node to an X3 user is the most common mistake.
+3. Read the subscribe/publish topics so you know how data flows in and out.
+4. Copy the minimal `launch`, swapping the **model filename** for the board's artifact (`.bin` on X-series vs `.hbm` on S-series; within S-series `nashe` for S100, `nashm` for S100P, `nashp` for S600).
+5. For detection/classification/segmentation, most share **`dnn_node_example`** (repo [hobot_dnn](https://github.com/D-Robotics/hobot_dnn)) — switch models via `dnn_example_config_file` rather than a different package.
 
-## 硬件参考主题
+### Workflow 3 — Stereo depth & lidar bringup
 
-以下主题详见 [硬件与系统参考](references/hardware-notes.md):
+**Use when:** hobot_stereonet, double camera, Livox / Mid-360 / HAP lidar, point cloud sparse, packet loss.
 
-- TROS (TogetheROS.Bot)
-- 双目深度（hobot_stereonet）
-- Livox 激光雷达（livox_ros_driver2）
+- **Stereo depth (`hobot_stereonet`, X5 / S100 / S100P)** — calibrate the stereo pair first (checkerboard → `left.yaml`/`right.yaml`/`extrinsics.yaml`, path given in launch). Left/right timestamp skew **> 30 ms** badly degrades disparity — use a hardware trigger or PTP sync. Input is a left/right spliced combined image on `/image_combine_raw`; outputs are `/StereoNetNode/stereonet_depth` (mm), `/StereoNetNode/stereonet_pointcloud2` (m), `/StereoNetNode/stereonet_visual` (older docs write these as `~/stereonet_*`).
+- **Livox lidar (`livox_ros_driver2`)** — must be **wired** (Wi-Fi bandwidth is insufficient). Keep NIC `MTU = 1500` (`sudo ip link set dev eth0 mtu 1500`) or the whole cloud goes sparse. Default subnet `192.168.1.x`; pick the launch by model (`ros2 launch livox_ros_driver2 msg_HAP_launch.py`). Details: [hardware-notes.md](references/hardware-notes.md).
 
-## 参考资料
+### Workflow 4 — Full robot app cases (AMR / line-follower)
 
-- [TROS/ROS2 命令](references/ros-commands.md)
-- [TROS 功能节点目录(感知能力→节点速查)](references/tros-node-catalog.md)
-- [官方端到端应用案例(X 系列 AMR / 巡线小车)](references/app-cases.md)（从硬件清单→传感器自检→kalibr 标定→建图导航 / CNN 采集标注训练量化→板端 BPU 推理闭环的整链路;单点节点仍查 tros-node-catalog）
-- [硬件与系统参考(详细章节)](references/hardware-notes.md)
+**Use when:** "build a working robot following the official guide" — autonomous navigation (AMR) or a CNN line-follower car, end to end.
+
+Send the user to [app-cases.md](references/app-cases.md). These are complete TROS projects (sensor self-check → calibration → mapping/nav, or collect → label → train → quantize → on-board BPU inference). For a single node, stay in the catalog; the per-step deep dives route to rdk-device (model conversion) and rdk-model-zoo (ready-made models).
+
+## Worked examples
+
+**Example 1 — "在 S600 上 source /opt/tros/humble 报路径不存在"**
+S600 is Ubuntu 24.04 with ROS2 **Jazzy**, so the path is `/opt/tros/jazzy/setup.bash`, not humble. Tell them to source jazzy; apt packages are `tros-jazzy-*`. If `ros2` still isn't found, the image may only have TROS configured for the `sunrise` user → `su - sunrise` and retry. (This board behaves differently from X5/S100 — those are Humble.)
+
+**Example 2 — "我想做手势控制,该用哪个节点?"**
+It's a cascade, not one node: `mono2d_body_detection` (body box) → `hand_lmk_detection` (hand keypoints) → `hand_gesture_detection` (gesture). All three support **X3 / X5 / X5 Module** (not S-series). For a ready-made full robot demo, point them at the `gesture_control` app (X3/X5). Give the launch lines from the catalog and note the cascade topics (`/hobot_mono2d_body_detection` → `/hobot_hand_lmk_detection`).
+
+**Example 3 — "X5 上跑 YOLO 检测节点,直接用什么命令?"**
+`dnn_node_example` with a YOLO config: `ros2 launch dnn_node_example dnn_node_example.launch.py dnn_example_config_file:=config/yolov5workconfig.json dnn_example_image_width:=1920 dnn_example_image_height:=1080`. Switch versions via `dnn_example_config_file` (X5 supports v2/v3/v5/v8/v10/v11/v12/yolo26; **S600 only v2/v3/v5**). Input `/hbmem_img`, output `hobot_dnn_detection`. Don't assume every YOLO version works on every board — check the board column.
+
+**Example 4 — "双目深度图全是噪点,跑 hobot_stereonet 出来很差"**
+Two usual causes: (1) the stereo pair was never calibrated → generate `left/right/extrinsics.yaml` and point the launch at them; (2) left/right timestamp skew > 30 ms → use a hardware trigger or PTP. Confirm the input is the combined image on `/image_combine_raw` and check `/StereoNetNode/stereonet_depth` is actually publishing. hobot_stereonet runs on X5 / S100 / S100P only.
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+|---------|------|
+| Tell an S600 user to `source /opt/tros/humble` | S600 is Jazzy → `/opt/tros/jazzy/setup.bash` |
+| Assume `ros2 not found` = broken install | Source the env first; try `su - sunrise` on S100/S600 |
+| Recommend an S100-only node to an X3 user | Check the 支持平台 column before suggesting a node |
+| Reuse the same model filename across boards | Swap `.bin`/`.hbm`, and the S-march infix (`nashe` S100 / `nashm` S100P / `nashp` S600) per board in launch |
+| Guess the launch file path | `ros2 pkg prefix <pkg>` + `find /opt/tros -name "*launch.py"` |
+| Run a Livox lidar over Wi-Fi | Wire it; keep MTU 1500 or the cloud goes sparse |
+| Assume every YOLO version runs on every board | X5 = v2…v12/yolo26; S600 = v2/v3/v5 only |
+
+## Reference map
+
+| Read this | When |
+|-----------|------|
+| [tros-node-catalog.md](references/tros-node-catalog.md) | Picking a perception node — per-node package, role, key subscribe/publish topics, **support platform**, minimal launch, official doc, by category |
+| [ros-commands.md](references/ros-commands.md) | ROS2/TROS command reference (launch, run, topic, node, pkg, colcon) with risk and supported boards |
+| [app-cases.md](references/app-cases.md) | Building the full official AMR or line-follower robot end to end (hardware list → calibration → mapping/nav, or collect → train → quantize → on-board inference) |
+| [hardware-notes.md](references/hardware-notes.md) | Deep dives: TROS env layout, hobot_stereonet calibration, Livox lidar networking |
+| `scripts/tros_env.py` | Quick board → ROS2 distro / setup path / apt prefix / model artifact lookup |

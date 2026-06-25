@@ -1,0 +1,66 @@
+{
+  "skill_name": "host-software-dev",
+  "description": "Test prompts that verify host-software-dev triggers and produces correct, host-side (PC) guidance for RDK Studio, flashing tools, the x86 Docker toolchain, and Studio's own desktop-app engineering. Prompts are phrased the way a real RDK developer would (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "studio-install-platform-matrix",
+      "prompt": "我用的是 Intel 芯片的 MacBook，怎么安装 RDK Studio 桌面客户端？",
+      "expected_output": "States the desktop client ships only for Windows 10/11 64-bit and Apple-Silicon macOS, so Intel Mac has no installer; routes to the CLI as the alternative.",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "Says the RDK Studio desktop client is only available for Windows 10/11 (64-bit) and macOS Apple Silicon." },
+        { "id": "1b", "text": "States there is NO Intel-Mac (or Linux) desktop installer, so this machine cannot run the GUI." },
+        { "id": "1c", "text": "Offers the rdkstudio / dmoss-agent CLI (or a different supported machine) as the alternative instead of inventing an Intel build." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "s-series-flash-tool",
+      "prompt": "RDK S100 怎么刷系统？是不是和 X5 一样用 Rufus 写 SD 卡？",
+      "expected_output": "No — S-series flashes over USB with Xburn (DFU+Fastboot / Fastboot), not Rufus/SD; Windows needs the sunrise5 WinUSB driver.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "Says S100 does NOT use Rufus / an SD card — that path is for X3/X5." },
+        { "id": "2b", "text": "Names Xburn as the S-series flasher, over USB (Type-C)." },
+        { "id": "2c", "text": "Mentions a mode/driver detail (DFU+Fastboot vs Fastboot, or the sunrise5 WinUSB driver on Windows)." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "toolchain-host-docker",
+      "prompt": "我想把 yolo 模型转成 bin，应该在哪台机器、什么环境里跑 hb_mapper？需要显卡吗？",
+      "expected_output": "On an x86 Linux host inside Docker (Ubuntu 20.04, ≥16GB RAM, Docker 19.03+); GPU optional, CPU-only host works; not on the board.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Says conversion runs on an x86 Linux host inside Docker, NOT on the board." },
+        { "id": "3b", "text": "States a GPU is optional / a CPU-only host can convert models." },
+        { "id": "3c", "text": "Mentions a host requirement (Ubuntu 20.04, ≥16GB RAM, or Docker 19.03+) or the openexplorer toolchain image." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "studio-electron-preload-bug",
+      "prompt": "在改 RDK Studio 源码，renderer 里报 require is not defined，怎么修？",
+      "expected_output": "Identifies a preload/renderer sandbox boundary issue; keep Node code in main/preload and expose a narrow contextBridge API; verify the preload path.",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "Identifies this as a preload/renderer sandbox boundary issue, not a business-logic bug." },
+        { "id": "4b", "text": "Says to keep Node-only code in main/preload and expose a narrow API via contextBridge instead of require() in the renderer." },
+        { "id": "4c", "text": "Mentions verifying the BrowserWindow webPreferences.preload path is actually loaded." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "typec-direct-connect",
+      "prompt": "RDK X5 在我电脑旁边但没有局域网 IP，怎么用 RDK Studio 连上它？",
+      "expected_output": "Use RDK Studio Type-C direct connect with a full-function data cable; device side 192.168.128.10; default root/root.",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "Recommends RDK Studio's Type-C direct connect (RDK Type-C 直连)." },
+        { "id": "5b", "text": "Mentions needing a full-function Type-C data cable (not charge-only)." },
+        { "id": "5c", "text": "Mentions the device-side address 192.168.128.10 and/or default login root/root." }
+      ]
+    }
+  ]
+}

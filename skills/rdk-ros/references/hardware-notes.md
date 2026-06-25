@@ -1,44 +1,47 @@
-# RDK TROS/ROS2 开发 · 硬件与系统参考
+# RDK TROS/ROS2 — Hardware & System Reference
 
-> 来源:整理自 D-Robotics RDK 官方文档、工具链与社区实践,逐条保留出处链接;由 device-knowledge 知识库忠实转换而来,未改写技术事实。
+> Sources: D-Robotics official docs and repos — [tros_doc](https://github.com/D-Robotics/tros_doc) (TROS env, zero-copy), [hobot_stereonet](https://github.com/D-Robotics/hobot_stereonet), [livox_ros_driver2](https://github.com/D-Robotics/livox_ros_driver2). Facts re-checked 2026-06; only what the docs/repos state.
 
-本文汇集本 skill 涉及的 RDK 硬件/系统章节,逐节整理自官方文档与实践,供需要细节时查阅。
+## TROS (TogetheROS.Bot)
 
-### 5. TROS (TogetheROS.Bot)
+- Based on **ROS2 Humble**, path `/opt/tros/humble/` (X3 / X5 / Ultra / S100 / S100P). **RDK S600 is ROS2 Jazzy**, path `/opt/tros/jazzy/` (Ubuntu 24.04, apt packages `tros-jazzy-*`).
+- Preinstalled nodes live under `/opt/tros/humble/lib/<pkg>/` and `/opt/tros/humble/share/<pkg>/` (S600: `/opt/tros/jazzy/...`).
+- Model files are usually in the package's `config/` directory: `*.bin` for X3/X5/Ultra, `*.hbm` for S100/S100P/S600 (matches the board's BPU architecture).
+- Activate the env: `source /opt/tros/humble/setup.bash` (or `.../jazzy/...` on S600).
+- **S100/S600 caveat:** some images only configured the TROS source in the `sunrise` user's `~/.bashrc`; `root` must run it manually, or `su - sunrise`.
 
-- 基于 ROS2 Humble，路径 `/opt/tros/humble/`（X3/X5/Ultra/S100/S100P）;**RDK S600 是 ROS2 Jazzy，路径 `/opt/tros/jazzy/`**（Ubuntu 24.04，包名 `tros-jazzy-*`）
-- 预装节点在 `/opt/tros/humble/lib/<pkg>/` 和 `/opt/tros/humble/share/<pkg>/`（S600 对应 `/opt/tros/jazzy/...`）
-- 模型文件通常在包内 `config/` 目录：X3/X5/Ultra 为 `/opt/tros/humble/lib/<pkg>/config/*.bin`，S100/S100P 为 `config/*.hbm`（按板型 BPU 架构）
-- 环境激活：`source /opt/tros/humble/setup.bash`
-- **S100 特殊**：部分镜像仅 `sunrise` 用户的 `~/.bashrc` 配了 TROS source，root 需手动执行
+**Common diagnostics**
+- `ros2 pkg list | grep <name>` — is the package installed
+- `ros2 pkg prefix <name>` — package install path
+- `ros2 launch <pkg> <launch.py> --show-args` — tunable launch args
+- `ros2 node list` / `ros2 topic list` — node and topic state
 
-**常用排障**
-- `ros2 pkg list | grep <name>` — 确认包是否安装
-- `ros2 pkg prefix <name>` — 查包安装路径
-- `ros2 launch <pkg> <launch.py> --show-args` — 查看 launch 可用参数
-- `ros2 node list` / `ros2 topic list` — 确认节点和话题状态
+### Zero-copy (`/hbmem_img`)
 
-### 10. 双目深度（hobot_stereonet）
+Native ROS2 large-data transport has high latency/load, so TROS offers zero-copy via the RDK `hbmem` library. **tros.b Foxy** is a private implementation; **Humble and later (including Jazzy) use ROS2-native loaned messages** (`talker_loaned_message`). This is why many vision nodes subscribe `/hbmem_img` instead of `/image`.
 
-- **仓库**：<https://github.com/D-Robotics/hobot_stereonet>
-- **板型适配**：官方支持表为 RDK X5/X5 Module(Humble) 与 S100;BPU 架构不同产物跨架构不通用(X5=`.bin`,S100/S600=`.hbm`)。以仓库当前支持表为准。
-- **标定**：必须先用棋盘格做双目内/外参标定，生成 `left.yaml`/`right.yaml`/`extrinsics.yaml`，路径在 launch 中指定
-- **常见坑**：
-  - 左右相机时间戳偏差 > 30ms 会显著影响视差精度，建议用硬件触发（trigger 线）或 PTP 时间同步
-  - 模型输入尺寸是双目各一路的 **640×352×3×2 或 544×448×3×2**(以仓库模型为准),深度图与左图对齐输出
-  - 推理 fps 随板型/模型变化,以实测为准
+## Stereo depth (`hobot_stereonet`)
 
-### 11. Livox 激光雷达（livox_ros_driver2）
+- **Repo:** <https://github.com/D-Robotics/hobot_stereonet>
+- **Board support:** per the README, RDK **X5 / X5 Module (Humble)** and **S100 / S100P**. Cross-architecture artifacts are not interchangeable (X5 = `.bin`, S-series = `.hbm`). Defer to the repo's current support table.
+- **Calibration:** calibrate the stereo intrinsics/extrinsics first with a checkerboard, producing `left.yaml` / `right.yaml` / `extrinsics.yaml`; the path is given in the launch.
+- **Topics:** input is the left/right spliced combined image on `/image_combine_raw` (optional `/image_combine_raw/right/camera_info`); the node runs as `StereoNetNode`, so outputs are `/StereoNetNode/stereonet_depth` (mm), `/StereoNetNode/stereonet_pointcloud2` (m), `/StereoNetNode/stereonet_visual` (older docs write these as `~/stereonet_*`). Depth is aligned to the left image.
+- **Common pitfalls:**
+  - Left/right timestamp skew **> 30 ms** badly degrades disparity accuracy — use a hardware trigger line or PTP time sync.
+  - Model input size is per-eye (e.g. `640×352×3×2` or `544×448×3×2`, per the repo model); the depth map aligns to the left image.
+  - Inference FPS varies by board/model — measure on the actual board.
 
-- **仓库**：<https://github.com/D-Robotics/livox_ros_driver2>
-- **支持型号**：Mid-360（车规小型化）、HAP（量产）、Avia（开发款）等
-- **网络**（以仓库 `config/*.json` 为准）：雷达走以太网 + UDP；默认网段 192.168.1.x
-  - **Mid-360**：出厂 IP `192.168.1.1XX`（XX = 雷达 SN 后两位,如 SN 尾 02 → `192.168.1.102`）；上位机(板端)host 配 `192.168.1.50/24`；端口 host 侧 561xx
-  - **HAP**：设备 IP `192.168.1.100`，板端 host IP `192.168.1.5`；端口 cmd 56000 / point 57000 / imu 58000 / log 59000
-  - 防火墙放行约 UDP 56000-59000(HAP) / 561xx(Mid-360)
-- **启动**：`ros2 launch livox_ros_driver2 msg_HAP_launch.py`（按型号选 launch）
-- **数据类型**：`livox_ros_driver2/msg/CustomMsg`（含强度+时间戳）和标准 `sensor_msgs/PointCloud2` 二选一
-- **常见坑**：
-  - 网卡 MTU < 1500 会丢包，全部点云稀疏 → `sudo ip link set dev eth0 mtu 1500`
-  - Wi-Fi 桥接走雷达数据带宽不够，**必须**走有线
-  - rosbag 录制点云体积巨大（HAP ~50MB/s），按需开关录制
+## Livox lidar (`livox_ros_driver2`)
+
+- **Repo:** <https://github.com/D-Robotics/livox_ros_driver2>
+- **Supported models:** Mid-360 (automotive-grade compact), HAP (mass-production), Avia (development), etc.
+- **Networking (defer to the repo `config/*.json`):** lidar over Ethernet + UDP; default subnet `192.168.1.x`.
+  - **Mid-360:** factory IP `192.168.1.1XX` (XX = last two digits of the lidar SN, e.g. SN ending 02 → `192.168.1.102`); board host IP `192.168.1.50/24`; host-side port `561xx`.
+  - **HAP:** device IP `192.168.1.100`, board host IP `192.168.1.5`; ports cmd 56000 / point 57000 / imu 58000 / log 59000.
+  - Open the firewall for roughly UDP 56000-59000 (HAP) / 561xx (Mid-360).
+- **Launch:** `ros2 launch livox_ros_driver2 msg_HAP_launch.py` (pick the launch by model).
+- **Data types:** `livox_ros_driver2/msg/CustomMsg` (intensity + timestamp) or standard `sensor_msgs/PointCloud2`.
+- **Common pitfalls:**
+  - NIC `MTU < 1500` drops packets and makes the whole cloud sparse → `sudo ip link set dev eth0 mtu 1500`.
+  - Wi-Fi bridging has insufficient bandwidth for lidar data — **must** be wired.
+  - Recording point clouds to a rosbag is huge (HAP ~50 MB/s) — toggle recording as needed.

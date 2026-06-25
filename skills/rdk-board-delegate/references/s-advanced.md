@@ -1,143 +1,149 @@
-# RDK S 系列 Linux 高级开发(S100 家族独有主题)
+# RDK S-Series Linux Advanced Development (Acore-side subsystems)
 
-> 来源:D-Robotics 官方文档仓 `rdk_doc`(default branch `main`)`docs_s/07_Advanced_development/02_linux_development/**`,逐主题保留出处路径与在线 URL。在线版:https://developer.d-robotics.cc 。只写文档里有出处的事实,未改写技术结论。
+> Source: official D-Robotics `rdk_s_doc` repo, `docs/07_Advanced_development/02_linux_development/04_driver_development_super/**`, `06_OTA/**`, `docs/07_Advanced_development/07_vdsp_development.md`, and `03_multimedia_development/`. Online: https://developer.d-robotics.cc . Each topic keeps its source path; only facts present in the docs are recorded, re-verified against the current repo.
 
-## 适用范围(先看这里)
+## Table of contents
+- [Scope & platform gates](#scope--platform-gates)
+- [1. hbmem — zero-copy shared memory](#1-hbmem--zero-copy-shared-memory)
+- [2. Acore-side IPC + real-time tuning](#2-acore-side-ipc--real-time-tuning)
+- [3. PCIe — RC/EP, multi-board, accelerator card](#3-pcie--rcep-multi-board-accelerator-card)
+- [4. EtherCAT — multi-axis motion-control master](#4-ethercat--multi-axis-motion-control-master)
+- [5. PTP / gPTP — time synchronization](#5-ptp--gptp--time-synchronization)
+- [6. System OTA & standalone miniboot upgrade](#6-system-ota--standalone-miniboot-upgrade)
+- [7. VDSP — on-chip vector DSP](#7-vdsp--on-chip-vector-dsp)
+- [Quick lookup table](#quick-lookup-which-topic-which-board)
 
-- 本文覆盖的主题文档目录命名为 **S100X**,适用 **S100 家族 = RDK S100 + RDK S100P 两款产品**(官方型号表只有这两款:RDK S100=KS1E55Y/SoC 标记 **S100E**/12GB/1.5GHz/80TOPS,RDK S100P=KS1P75Y/SoC S100P/24GB/2.0GHz/128TOPS)。**`S100E` 是 RDK S100 的 SoC 芯片标记,不是独立的第三款板型**。hbmem 的 12G/24G 内存模式分别对应 S100(12GB)与 S100P(24GB)。
-- **S600 大体也被这些 Acore 高级开发文档覆盖,但靠 `<DocScope>` 按板型分段**(本文以 S100 家族为主线整理):
-  - **EtherCAT**:同一份 `02_linux_development/.../16_driver_ethernet/02_ethercat.md` 用 `<DocScope products="RDK S600">` 明确写了 **RDK S600 V5.1.0+ 默认 Native(hobot)EtherCAT 驱动**(与 S100 V4.0.7+ 并列),并列出 S100/S600 四个网口 MAC——所以 §4 的 IgH 主站对 S600 适用,只是版本门槛/MAC 等按 S600 段为准。
-  - **hbmem**:S600 有**专属 sample 指南** `03_multimedia_development/03_S600_multimedia_application/12_hbmem_sample_guide.md`(支持平台明确含 RDK S600),`libhbmem` API 与 §1 同(com/graphic buffer、queue、pool、share pool、多进程共享),板上代码在 `/app/communication_demo/hbmem_demo/sample_hbmem`。
-  - 仍以官方 S600 段/手册为准的:内存模式容量(S600 非 12/24G 档)、PCIe/PTP 的 S600 专属差异、具体寄存器/MAC 值——这些 §1~§6 的 S100 数值不要直接套 S600。
-- 这些都是 **Acore(Linux/大脑)侧** 的系统能力;MCU(小脑)侧的 IPC / FreeRTOS / 固件烧录见同 skill 的 [MCU 开发参考](mcu-development.md)。两者互补:本文补的是「大脑侧怎么用 IPC、怎么管共享内存、怎么走 PCIe/EtherCAT/PTP」。
+## Scope & platform gates
 
----
-
-## 1. hbmem:零拷贝共享内存(感知-决策-控制流水线的内存底座)
-
-> 来源:`04_driver_development_s100/15_driver_hbmem/01_introduce`、`02_hardware`、`03_software`。
-
-**是什么** —— `libhbmem`(`libhbmem.so` / 头文件 `hb_mem_mgr.h`)对 S100X **系统预留内存** 的统一管理,四大能力:内存分配、内存共享、内存队列、内存池/共享内存池。**非 root 用户无法使用 hbmem API**。
-
-**典型用途** —— 在 CPU / BPU / ISP / Codec / VDSP / MCU(IPC) 之间**零拷贝**传递图像与 featuremap:一个模块产出的 buffer 直接 import 到另一个线程/进程,靠引用计数(consume count)保证不被提前释放。机器人上典型链路:相机/ISP 产出 → BPU 推理输入 → 后处理,全程不拷贝大块内存。
-
-**两种 buffer 类型**:
-- `com_buf` —— 整块连续物理内存,适合语音、纯 featuremap。`hb_mem_alloc_com_buf`。
-- `graph_buf` —— 图像内存(RGB/RAW 用一个 buffer;**planar YUV 各分量物理地址不连续**),适合 Pyramid 输出。`hb_mem_alloc_graph_buf`;一次申请多个并成组用 `hb_mem_alloc_graph_buf_group`。
-
-**关键接口**(均在 `hb_mem_mgr.h`):
-- 生命周期:`hb_mem_module_open` / `hb_mem_module_close`。
-- 分配/释放:`hb_mem_alloc_com_buf` / `hb_mem_alloc_graph_buf` / `hb_mem_free_buf`(或 `_with_vaddr` 版)。
-- cache 一致性:`hb_mem_flush_buf`(写回内存)/ `hb_mem_invalidate_buf`(使 cache 无效),都有 `_with_vaddr` 变体。
-- 跨进程共享:`hb_mem_import_com_buf` / `hb_mem_import_graph_buf`,配 `hb_mem_inc_*_consume_cnt` / `hb_mem_dec_consume_cnt` 管引用计数;`hb_mem_get_share_info` / `hb_mem_wait_share_status` 等待共享就绪。
-- 内存池:`hb_mem_pool_create` / `_alloc_buf`(单进程,绕过陷内核态,加速分配);共享内存池 `hb_mem_share_pool_create`(多进程共享,但池内 buffer **等大**、import/free 略慢)。
-- 队列:`hb_mem_create_buf_queue` + `hb_mem_dequeue_buf` / `hb_mem_queue_buf`(生产者)/ `hb_mem_request_buf` / `hb_mem_release_buf`(消费者),四态 FREE/DEQUEUE/QUEUE/REQUEST。**环形队列、满了会覆盖最早元素、仅支持单进程**。
-
-**分配属性(`HB_MEM_USAGE_*`,按位组合)**:cache 属性 `HB_MEM_USAGE_CACHED`;读写意图 `CPU_READ_OFTEN`/`CPU_WRITE_OFTEN`(WRITE 自动带 READ);heap 选择 `PRIV_HEAP_DMA`(cma)/`PRIV_HEAP_RESERVED`(carveout)/`PRIV_HEAP_2_RESERVED`(carveout2);初始化 `MAP_INITIALIZED`/`MAP_UNINITIALIZED`;`HW_*`(如 `HW_BPU`/`HW_ISP`/`HW_PCIE`/`HW_IPC`)仅作 debug 标记,不影响分配。
-
-**硬件/内存布局** —— S100X 支持 **12G / 24G interleave** 两种内存模式。默认 ION 预留三类 heap:`cma_reserved`(1GiB)、`carveout`(512MiB)、`cma`(512MiB)。heap 不足时回退顺序为 `cma_reserved => carveout => cma`(或对称组合)。heap 大小可在 dts 改,但要留够系统内存。
-
-**适用** —— RDK S100 / S100P(12G 模式=S100,24G 模式=S100P)。
-
-**坑** —— 不要直接对物理地址 `mmap`/传递,**不会增加引用计数**,存在释放后仍被访问的风险;改用 import 接口。
-
-**文档** —— https://developer.d-robotics.cc/rdk_doc/Advanced_development/linux_development/driver_development_s100/driver_hbmem(以站点实际路由为准;源文件 `docs_s/07_Advanced_development/02_linux_development/04_driver_development_s100/15_driver_hbmem/`)。
+- These are all **Acore (Linux / big-brain) side** capabilities; the MCU (little-brain) side — IPC `Ipc_MDMA_*`, IpcBox, FreeRTOS, firmware flashing — is in [mcu-development.md](mcu-development.md). They are complementary: this file is "how the big brain manages memory / messaging / upgrades / DSP".
+- Docs are now in `rdk_s_doc` with driver topics under `02_linux_development/04_driver_development_super/`. (Earlier wording referenced `rdk_doc/docs_s/.../04_driver_development_s100` — that path is stale; the current repo uses `_super`.)
+- **The S family is RDK S100 + RDK S100P + RDK S600.** `S100E` is the SoC chip marking of RDK S100 (12GB/1.5GHz/80TOPS), not a separate board; `S100P` SoC is 24GB/2.0GHz/128TOPS. **S600 runs Ubuntu 24.04 + TROS Jazzy; S100/S100P run Ubuntu 22.04 + Humble.**
+- **S600 is covered too, but the docs gate facts by `<DocScope>` per board.** Where S100 and S600 differ, the difference is called out below. Do **not** copy S100-specific numeric values onto S600.
 
 ---
 
-## 2. Acore 侧 IPC:大脑(Linux)怎么和小脑(MCU)/VDSP/BPU 通信
+## 1. hbmem — zero-copy shared memory
 
-> 来源:`04_driver_development_s100/06_driver_ipc.md`。**MCU 侧** 的 IPC(`Ipc_MDMA_*` API、IpcBox、receive_coreid 等)见 [mcu-development.md](mcu-development.md) 第 5 节;本节补的是 **Acore/Linux 侧** 的实例分配、设备树配置、实时性调优与用户态 sample,与 MCU 侧不重复。
+> Source: `04_driver_development_super/15_driver_hbmem/01_s100_hbmem_introduce.md` (+ `02_..._hardware`, `03_..._software`, `04_..._debug`, `05_..._FAQ`).
 
-**是什么** —— IPC(Inter-Processor Communication)= **共享内存(buffer-ring)+ MailBox 核间中断**。Acore 侧对外封装为 `libipcfhal`(用户态↔内核态),底层是 IPCF 驱动;Acore↔VDSP 走 RPMSG(开源框架)。
+**What it is** — `libhbmem` (`libhbmem.so`, header `hb_mem_mgr.h`) unifies management of the S-series **system-reserved memory**, with four capabilities: allocation, sharing, queues, and pools / shared pools. **hbmem APIs require root.**
 
-**实例分配方案**(Acore 侧实例号 0-34):
-- `[0-14]` Acore↔MCU(其中 `[0-8]` 可用,`[4-6]` 默认客户预留,不用 CANHAL/规控可自行改配置)。
-- `[22-24]` Acore↔VDSP(RPMSG,暂未对客户开放)。
-- `[32-34]` Acore↔BPU。
+**Typical use** — pass images and featuremaps **zero-copy** between CPU / BPU / ISP / Codec / VDSP / MCU(IPC): one module's buffer is `import`-ed into another thread/process, and a consume-count keeps it from being freed early. The canonical robot pipeline: camera/ISP output → BPU inference input → post-process, with no large copies.
 
-**Acore 侧配置**(设备树)—— `source/hobot-drivers/kernel-dts/drobot-s100-ipc.dtsi`(及 `include/drobot_s100_ipc.h`)。每实例配 `instance--num_chans--num_bufs--buf_size`;约束:`通道数 * buf 个数 * buf 大小 <= 0.5MB`(数据段每实例预分配 1MB,Acore/MCU 各半);通道数 <= 32、buf 个数 <= 1024。**Acore 与 MCU 两侧的通道数/buf 数/大小必须一致,data/ctrl 段的 local 与 remote 相反**。
+**Two buffer types**:
+- `com_buf` — one contiguous physical block, for audio / plain featuremaps. `hb_mem_alloc_com_buf`.
+- `graph_buf` — image memory (RGB/RAW use one buffer; **planar YUV components are physically non-contiguous**), for Pyramid output. `hb_mem_alloc_graph_buf`; allocate several as a group with `hb_mem_alloc_graph_buf_group`.
 
-**典型用途** —— OTA、诊断、规控、CANHAL 等业务;以及 IpcBox 把 MCU 侧 UART/SPI/I2C 外设透传到 Acore。
+**Key interfaces** (all in `hb_mem_mgr.h`):
+- Lifecycle: `hb_mem_module_open` / `hb_mem_module_close`.
+- Alloc/free: `hb_mem_alloc_com_buf` / `hb_mem_alloc_graph_buf` / `hb_mem_free_buf` (and `_with_vaddr` variants).
+- Cache coherency: `hb_mem_flush_buf` (write back) / `hb_mem_invalidate_buf` (invalidate), both with `_with_vaddr` variants.
+- Cross-process sharing: `hb_mem_import_com_buf` / `hb_mem_import_graph_buf`, with `hb_mem_inc_*_consume_cnt` / `hb_mem_dec_consume_cnt` for ref-counting; `hb_mem_get_share_info` / `hb_mem_wait_share_status` wait for share readiness.
+- Pools: `hb_mem_pool_create` / `_alloc_buf` (single-process, bypasses the kernel trap, faster alloc); shared pool `hb_mem_share_pool_create` (multi-process, but pool buffers are **equal-sized**, import/free slightly slower).
+- Queues: `hb_mem_create_buf_queue` + `hb_mem_dequeue_buf` / `hb_mem_queue_buf` (producer) / `hb_mem_request_buf` / `hb_mem_release_buf` (consumer), four states FREE/DEQUEUE/QUEUE/REQUEST. **Ring queue, overwrites the oldest when full, single-process only.**
 
-**实时性优化(机器人硬实时回路关键,以 ipc_instance5 为例)**:
+**Allocation attributes (`HB_MEM_USAGE_*`, bit-OR'd)**: cache `HB_MEM_USAGE_CACHED`; intent `CPU_READ_OFTEN`/`CPU_WRITE_OFTEN` (WRITE implies READ); heap `PRIV_HEAP_DMA` (cma) / `PRIV_HEAP_RESERVED` (carveout) / `PRIV_HEAP_2_RESERVED` (carveout2); init `MAP_INITIALIZED`/`MAP_UNINITIALIZED`; `HW_*` (e.g. `HW_BPU`/`HW_ISP`/`HW_PCIE`/`HW_IPC`/VDSP) is a debug-only tag and does not affect allocation.
+
+**Memory layout** — S100/S100P support **12G / 24G interleave** modes (12G ↔ S100, 24G ↔ S100P). The default ION reserves three heaps: `cma_reserved`, `carveout`, `cma`. On exhaustion the fallback order is `cma_reserved => carveout => cma`. Heap sizes are tunable in the dts, but leave enough system memory.
+
+**Platform** — RDK S100 / S100P, **and S600**: S600 has its own sample guide `03_multimedia_development/03_S600_multimedia_application/12_hbmem_sample_guide.md` (support platform = RDK S600); the `libhbmem` API matches, board code at `/app/communication_demo/hbmem_demo/sample_hbmem`.
+
+**Pitfall** — do not `mmap`/pass a raw physical address; that **does not bump the reference count** and risks use-after-free. Use the `import` interfaces.
+
+---
+
+## 2. Acore-side IPC + real-time tuning
+
+> Source: `04_driver_development_super/06_driver_ipc.md`. The **MCU side** of IPC (`Ipc_MDMA_*`, IpcBox, receive_coreid) is in [mcu-development.md](mcu-development.md) §5; this section adds the **Acore/Linux side**: instance allocation, device-tree config, real-time tuning, user-space samples.
+
+**What it is** — IPC = **shared memory (buffer-ring) + MailBox inter-core interrupt**. Acore wraps it as `libipcfhal` (user↔kernel) over the IPCF driver; Acore↔VDSP uses RPMSG.
+
+**Instance allocation (per `<DocScope>`, the ranges differ by board):**
+- **RDK S100**: Acore instances `[0-34]` → Acore↔MCU `[0-14]`, Acore↔VDSP `[22-24]`, Acore↔BPU `[32-34]`. Customers may use `[0-8]` for Acore↔MCU; `[4-6]` are reserved by default (free to repurpose if you don't use CANHAL / motion control).
+- **RDK S600**: Acore instances `[0-63]` → Acore↔MCU `[0-15]` and `[50-53]`, Acore↔VDSP `[22-24]` and `[42-44]`, Acore↔BPU `[32-39]`. Customers use `[0-15]` for Acore↔MCU; the rest are internal. (VDSP side: instances `[0-6]`; VDSP0 ↔ Acore `[22-24]`, VDSP1 ↔ Acore `[42-44]`.)
+
+**Acore-side config (device tree)** — per-instance `instance--num_chans--num_bufs--buf_size`. Constraints: `num_chans * num_bufs * buf_size <= 0.5MB` (each instance pre-allocates 1MB of data space, split 0.5MB Acore / 0.5MB MCU); `num_chans <= 32`, `num_bufs <= 1024`. **Acore and MCU must agree on channel count / buf count / size; the data and control segments' local and remote are swapped.** (In one channel, push and pop use independent ring buffers + interrupts, so send/receive are independent.)
+
+**Typical use** — OTA, diagnostics, motion control, CANHAL; plus IpcBox passing MCU-side UART/SPI/I2C through to Acore.
+
+**Real-time tuning (critical for robot hard real-time loops; example: ipc_instance5)**:
 ```bash
-cat /proc/interrupts | grep mailbox   # 按 dts mboxes=<&mailbox0 5 21 5> 推出中断号(此例 19)
-ps aux | grep mailbox                  # 找中断线程 pid(此例 75)
-echo 4 > /proc/irq/19/smp_affinity     # 中断绑到 CPU2,减少迁移
-taskset -p 0x04 75                     # 中断线程绑核 CPU2
-chrt -f -p 99 75                       # SCHED_FIFO 优先级 99,防被高优任务打断
-# uboot 下隔离 CPU(setenv bootargs "${bootargs} isolcpus=2 nohz_full=2 rcu_nocbs=2"; saveenv; reset)
-cat /sys/devices/system/cpu/isolated   # 确认隔离生效
-echo -1 > /proc/sys/kernel/sched_rt_runtime_us   # 放开 RT(慎用,可能饿死普通任务)
+cat /proc/interrupts | grep mailbox   # derive the IRQ from dts mboxes=<&mailbox0 5 21 5> (here 19)
+ps aux | grep mailbox                  # find the IRQ thread pid (here 75)
+echo 4 > /proc/irq/19/smp_affinity     # pin the IRQ to CPU2, reduce migration
+taskset -p 0x04 75                     # pin the IRQ thread to CPU2
+chrt -f -p 99 75                       # SCHED_FIFO priority 99, avoid preemption
+# In uboot, isolate the CPU: setenv bootargs "${bootargs} isolcpus=2 nohz_full=2 rcu_nocbs=2"; saveenv; reset
+cat /sys/devices/system/cpu/isolated   # confirm isolation
+echo -1 > /proc/sys/kernel/sched_rt_runtime_us   # uncap RT (use with care — can starve normal tasks)
 ```
 
-**用户态 sample** —— `/app/ipcbox_sample/`:`ipcbox_runcmd`(读 MCU ADC)、`ipcbox_uart`(UART 透传回环,S100 默认 Uart5,需 TX/RX 短接)、`ipcbox_spi`(SPI3 MOSI/MISO 短接回环)、`ipcbox_i2c`(detect/get/set)。**前提:先启动 MCU1,并确认 MCU 侧外设已配为透传**。另有 Python 库 `pyhbipchal`(pybind11 封装,`/app/pyhbipchal_sample/`)。
+**User-space samples** — `/app/ipcbox_sample/`: `ipcbox_runcmd` (read MCU ADC), `ipcbox_uart` (UART passthrough loopback, S100 default Uart5, short TX/RX), `ipcbox_spi` (SPI3 MOSI/MISO loopback), `ipcbox_i2c` (detect/get/set). **Prerequisite: start MCU1 first and confirm the MCU-side peripheral is set to passthrough.** A Python lib `pyhbipchal` (pybind11, `/app/pyhbipchal_sample/`) is also provided.
 
-**坑** —— 错误码 `IPCF_HAL_E_CHANNEL_INVALID`(14):内核态 RingBuffer 满(写)或空(读),建议等 1-2ms 重试。
+**Pitfall** — error `IPCF_HAL_E_CHANNEL_INVALID` (14): the kernel RingBuffer is full (write) or empty (read); wait 1-2ms and retry.
 
-**适用** —— S100 家族(Acore 是 6×A78AE 跑 Ubuntu 22.04)。
-
-**文档** —— 源文件 `docs_s/07_Advanced_development/02_linux_development/04_driver_development_s100/06_driver_ipc.md`。
+**Platform** — S100 family; S600 with the wider instance ranges above.
 
 ---
 
-## 3. PCIe:RC/EP、多 S100 拓扑与 PCIe 加速卡
+## 3. PCIe — RC/EP, multi-board, accelerator card
 
-> 来源:`04_driver_development_s100/13_driver_pcie/01_hw_guide`、`02_sw_arch`、`04_libhbpciehal`。
+> Source: `04_driver_development_super/13_driver_pcie/01_s100x_pcie_hw_guide`, `02_..._sw_arch`, `03_..._sw_setup`, `04_..._libhbpciehal`.
 
-**是什么/规格(S100E)** —— 2 个 PCIe Gen4 控制器,**每个都可配 RC 或 EP**;EP 模式支持 **SR-IOV(1 PF + 4 VF)**、8 对 DMA、MSI-X、SMMU、48 Outbound、**PTM 时间同步**。
+**What it is / spec (S100E)** — 2 PCIe Gen4 controllers, **each configurable as RC or EP**; EP mode supports **SR-IOV (1 PF + 4 VF)**, 8 DMA pairs, MSI-X, SMMU, 48 outbound, and **PTM time sync**.
 
-**典型用途/拓扑**(5 种):①双 S100X 直连(一 RC 一 EP);②三 S100X(一 RC 接两 EP);③S100X 接第三方标准 EP(如 NVMe SSD);④**S100X 作 EP 接第三方 RC(典型:S100X 当 PCIe AI 加速卡)**;⑤经 PCIe Switch 接多 S100X + 第三方 EP。
+**Typical topologies (5)** — ① two S-boards direct (one RC, one EP); ② three S-boards (one RC drives two EPs); ③ S-board + third-party standard EP (e.g. NVMe SSD); ④ **S-board as EP behind a third-party RC (canonical: the S-board acts as a PCIe AI accelerator card)**; ⑤ via a PCIe Switch to many S-boards + third-party EPs.
 
-**驱动加载** —— RC 端:`modprobe hobot-pcie / hobot-pcie-rc / hobot-pcie-ep-dev / hobot-pcie-dev-manager`;EP 端:`modprobe hobot-pcie / hobot-pcie-ep-fun`。源码在 `hobot-drivers/pcie/`。
+**Driver load** — RC side: `modprobe hobot-pcie / hobot-pcie-rc / hobot-pcie-ep-dev / hobot-pcie-dev-manager`; EP side: `modprobe hobot-pcie / hobot-pcie-ep-fun`. Source in `hobot-drivers/pcie/`.
 
-**用户态 High Level API** —— `libhbpciehl.so`(基于 Low Level `libhbpcie.so`),抽象出 **topic / publish / subscribe**,屏蔽不同地瓜芯片硬件差异:
+**User-space High Level API** — `libhbpciehl.so` (over Low-Level `libhbpcie.so`), abstracting **topic / publish / subscribe** to hide per-chip hardware differences:
 ```c
 pcieInit(&ph, chipID, topicID); pcieDeInit(ph);
 pciePublish(ph, weight); pcieSubscribe(ph);
-pcieAllocInnerBuf(...) / pcieRegisterUserBuf(...);  // 用户 buffer 需物理连续
+pcieAllocInnerBuf(...) / pcieRegisterUserBuf(...);  // user buffer must be physically contiguous
 pcieStartRecv(ph, callback, data); pcieSendData(ph, size);
 ```
-发送方 `pcieInit→pcieAlloc/Register Buf→pciePublish→pcieSendData`,接收方 `pcieInit→pcieSubscribe→pcieStartRecv`。
+Sender: `pcieInit → pcieAlloc/Register Buf → pciePublish → pcieSendData`; receiver: `pcieInit → pcieSubscribe → pcieStartRecv`.
 
-**适用** —— 文档以 S100E 规格给出,适用 S100X 家族;具体 lane/控制器数以板型硬件手册为准。
-
-**文档** —— 源文件 `docs_s/07_Advanced_development/02_linux_development/04_driver_development_s100/13_driver_pcie/`。
+**Platform** — docs give the S100E spec; applies to the S100 family. Confirm exact lane/controller counts in the per-board hardware manual.
 
 ---
 
-## 4. EtherCAT:多轴运动控制主站(机器人优先)
+## 4. EtherCAT — multi-axis motion-control master
 
-> 来源:`04_driver_development_s100/16_driver_ethernet/02_ethercat.md`。
+> Source: `04_driver_development_super/16_driver_ethernet/02_ethercat.md`.
 
-**是什么** —— S100 默认提供 **EtherCAT-IgH 1.5** 开源主站协议栈(deb 包 `hobot-ethercat`,含内核模块 + 用户层应用)。**EtherCAT 与普通以太网协议互斥,无法共存**(占用网口时 eth 不可用)。
+**What it is** — the S-series provides an **EtherCAT-IgH 1.5** open-source master stack (deb `hobot-ethercat`). **EtherCAT is mutually exclusive with normal Ethernet** — a port carrying EtherCAT is unavailable for eth.
 
-**典型用途** —— 工业/机器人多轴伺服、运动控制总线主站,周期性下发 PDO 控制多个伺服从站。
+**Native vs Generic driver (important, now the default behavior):**
+- **S100 V4.0.7+ and S600 V5.1.0+ default to the Native (`ec_hobot`) driver**, not Generic (`ec_generic`).
+- Native (`ec_hobot`) is **mutually exclusive with the `hobot_eth_super` (xgmac) driver** — starting `ethercat.service` unloads `hobot_eth_super`, and the bound port's **MAC disappears from `ip a`**. Native config **must use the MAC address** (interface names are not accepted); default `/etc/ethercat.conf` is pre-set to Native with `DEVICE_MODULES="hobot"`.
+- Generic (`ec_generic`) coexists with gmac, accepts interface name or MAC, and keeps the port visible.
+- Switching between Native and Generic: **edit the config file first, then reboot** — switching live can break networking.
 
-**关键命令**:
+**Key commands**:
 ```bash
-systemctl start ethercat.service        # 启动主站服务
-sudo ethercat master                     # 查看主站状态(Phase/Slaves/网口/帧统计)
-sudo cp script/ethercat.service /lib/systemd/system/ && sudo systemctl enable ethercat  # 自启
+sudo systemctl start ethercat        # start the master service
+sudo ethercat master                 # master status (Phase / Slaves / port / frame stats)
+sudo systemctl enable ethercat       # auto-start
 ```
-板端从源码编译:`git clone https://gitlab.com/etherlab.org/ethercat.git -b stable-1.5`,`./configure --enable-kernel --enable-generic --enable-igb --disable-eoe --enable-hrtimer --with-linux-dir=...`,再 `make / make modules / make install`;配置 `/usr/local/etc/ethercat.conf` 的 `MASTER0_DEVICE="eth0"`、`DEVICE_MODULES="generic"`。
+Generic-mode build from source on-board: `git clone https://gitlab.com/etherlab.org/ethercat.git -b stable-1.5`, `./configure --enable-kernel --enable-generic --enable-igb --disable-eoe --enable-hrtimer --with-linux-dir=...`, then `make / make modules / make install`; set `/usr/local/etc/ethercat.conf` `MASTER0_DEVICE="eth0"` and `DEVICE_MODULES="generic"`.
 
-**适用** —— S100 家族。**搭配 §2 的 IPC 绑核/隔核与 §5 的 PTP 时间同步可提升运动控制实时性与多轴对齐。**
+**Platform** — **S100 family + S600** (S600 V5.1.0+, confirmed by the doc's `<DocScope products="RDK S600">`). **Pair with §2 IPC core-pinning/isolation and §5 PTP to improve motion-control determinism and multi-axis alignment.**
 
-**文档** —— 源文件 `.../16_driver_ethernet/02_ethercat.md`;协议栈 https://etherlab.org/en_GB/ethercat 。
+**Docs** — EtherLab stack https://etherlab.org/en_GB/ethercat , IgH 1.5 manual https://docs.etherlab.org/ethercat/1.5/pdf/ethercat_doc.pdf .
 
 ---
 
-## 5. 时间同步:PTP / gPTP(多传感器/多轴时间对齐)
+## 5. PTP / gPTP — time synchronization
 
-> 来源:`04_driver_development_s100/12_driver_timesync.md`。
+> Source: `04_driver_development_super/12_driver_timesync.md`.
 
-**是什么** —— `linuxptp` 的 **ptp4l + phc2sys** 两件套:ptp4l 跑 PTP/gPTP(可作 master 或 slave),phc2sys 在 PHC(网卡硬件时钟)与 Linux 系统时钟之间互同步。支持硬件时间戳(`-H`,默认)。
+**What it is** — `linuxptp`'s **ptp4l + phc2sys** duo: ptp4l runs PTP/gPTP (master or slave), phc2sys syncs between the PHC (NIC hardware clock) and the Linux system clock. Hardware timestamps via `-H` (default).
 
-**典型用途** —— 机器人/自动驾驶多传感器与多轴控制的统一时基;附带 **automotive profile** 示例(`automotive-master.cfg` / `automotive-slave.cfg`,L2 传输、P2P delay、gPTP),位于 `/usr/hobot/lib/pkgconfig/`。
+**Typical use** — a unified time base across multi-sensor / multi-axis control on robots and autonomous machines; ships an **automotive profile** sample (`automotive-master.cfg` / `automotive-slave.cfg`: L2 transport, P2P delay, gPTP) under `/usr/hobot/lib/pkgconfig/`.
 
-**关键命令**:
+**Key commands**:
 ```bash
 # Master:
 ptp4l -i eth0 -f /usr/hobot/lib/pkgconfig/automotive-master.cfg -m -l 7
@@ -145,75 +151,77 @@ ptp4l -i eth0 -f /usr/hobot/lib/pkgconfig/automotive-master.cfg -m -l 7
 ptp4l -i eth0 -f /usr/hobot/lib/pkgconfig/automotive-slave.cfg -m -l 7 > ptp4l.log &
 phc2sys -s eth0 -c CLOCK_REALTIME --transportSpecific=1 -m --step_threshold=1000 -w > phc2sys.log &
 ```
-slave log 中 `master offset` 收敛到个位/十位即同步正常。配置文件语法见 https://linuxptp.nwtime.org/documentation/ptp4l/ 。
+In the slave log, `master offset` converging to single/double digits means sync is good. Config syntax: https://linuxptp.nwtime.org/documentation/ptp4l/ .
 
-**适用** —— S100 家族(PCIe 控制器另支持 PTM 时间同步,见 §3)。
-
-**文档** —— 源文件 `.../12_driver_timesync.md`。
+**Platform** — S100 family + S600 (the PCIe controller additionally supports PTM time sync, §3).
 
 ---
 
-## 6. 系统 OTA 与 miniboot 单独升级
+## 6. System OTA & standalone miniboot upgrade
 
-> 来源:`06_OTA/01_ota_system.md`、`06_OTA/02_ota_miniboot.md`。
+> Source: `06_OTA/01_ota_system.md`, `06_OTA/02_ota_miniboot.md`.
 
-**是什么** —— 设备端 OTA 交付物为 `libupdate.so`(底层烧写/校验 API),上层 OTA 服务与云端对接由客户实现。分区分三类:**持久化**(ubootenv/veeprom/userdata,不升级)、**AB**(boot_a/boot_b,交替升级)、**BAK**(主分区 + 备份,主升级验证成功后同步到备份)。
+**What it is** — the device-side OTA deliverable is `libupdate.so` (low-level flash/verify API); the upper OTA service and cloud integration are customer-implemented. Partitions split into three classes: **Persistent** (ubootenv/veeprom/userdata — not upgraded), **AB** (boot_a/boot_b — alternating upgrade), **BAK** (one primary + backups — upgrade the primary, then sync to backups on success).
 
-**根文件系统(开启 OTA 后)** —— `system_A`/`system_B`(只读 lowerdir,AB 双分区无缝升级)+ `overlay`(可写 upperdir,**不参与升级**)+ `/`(merged 视图)的 **overlayfs**:用户对 `/etc/xxx` 等的修改写进 overlay,OTA 升级 system 分区后用户改动仍优先生效。
+**Root filesystem (OTA enabled)** — a **system + overlayfs** layout: `system_A`/`system_B` (read-only lowerdir, AB dual-partition for seamless upgrade) + `overlay` (writable upperdir, **not upgraded**) + `/` (merged view). User edits to `/etc/...` land in overlay and stay effective after a system-partition upgrade.
 
-**开启 OTA(默认关闭)** —— 改 `build_params/*.conf` 的 `PARTITION_FILE="s100-ota-gpt.json"` 与 `RDK_DM_VERIFY_ENABLE="yes"`,改 `board_s100_*.mk` 的 `RDK_OTA="yes"`,`./mk_debs.sh hobot-miniboot` 后 `sudo ./pack_image.sh -l` 重编。OTA 包支持 `.zip` 与 `.zst.tar`(img 经 zstd 压缩,压缩比/解压更优)。
+**Enabling OTA (off by default)** — set `PARTITION_FILE` and `RDK_DM_VERIFY_ENABLE="yes"` in `build_params/*.conf`, then rebuild:
+- **S100**: conf `ubuntu-22.04_*_rdk-s100_*.conf`, `PARTITION_FILE="s100-ota-gpt.json"`.
+- **S600**: conf `ubuntu-24.04_{desktop,server}_rdk-s600_*.conf`, **`PARTITION_FILE="s600-ota-gpt.json"`** (note: S600 is Ubuntu 24.04 and uses its own partition table).
 
-**miniboot 单独升级**(`02_ota_miniboot.md`,**非 OTA 镜像也可用,重启生效**)—— 基于 OTA 分区级机制,**只升级 BAK 与 AB 分区**(`HSM_FW/HSM_RCA/keyimage/SBL/scp/spl/MCU/acore_cfg/bl31/optee/uboot`),**不碰 Permanent 分区**;失败自动回滚不变砖;**不支持升级分区表**(分区表有改动须用地瓜工具整烧)。命令:
+OTA packages support `.zip` and `.zst.tar` (zstd-compressed imgs, better ratio / faster decompress).
+
+**Standalone miniboot upgrade** (`02_ota_miniboot.md`, **works on non-OTA images too, applies on reboot**) — `rdk-miniboot-update` (script `/usr/bin/rdk-miniboot-update`, from deb `hobot-miniboot`) flashes only the miniboot BAK + AB partitions (`HSM_FW/HSM_RCA/keyimage/SBL/scp/spl/MCU/acore_cfg/bl31/optee/uboot`), **never the Permanent partitions**, and **cannot upgrade the partition table** (table changes need D-Robotics' full-flash tool). Commands:
 ```bash
-sudo apt-get install -y hobot-miniboot
-sudo rdk-miniboot-update --build release --reboot y   # --build release|debug(默认 release);--reboot y|n
+sudo apt-get install -y hobot-miniboot          # install auto-triggers rdk-miniboot-update
+sudo rdk-miniboot-update --build release --reboot y   # --build release|debug (default release); --reboot y|n
 ```
+- On NOR it `dd`s one pre-ordered whole-disk image in a single call; on eMMC/UFS it `dd`s each AB partition for the **current slot only** (read via `ota_tool -g`), not touching other AB partitions (e.g. S600's `vbmeta`).
+- **Caveat — no built-in auto-rollback**: unlike the two-phase system OTA state machine, miniboot upgrade has no rollback; a failed `dd` or power loss mid-write can leave the device unbootable. New miniboot takes effect only after reboot. `srpi-config` can only trigger the **release** build; debug must use `rdk-miniboot-update`.
 
-**适用** —— S100 家族(分区表名 `s100-ota-gpt.json`、`board_s100_*.mk`)。
-
-**文档** —— 源文件 `docs_s/07_Advanced_development/02_linux_development/06_OTA/`。
+**Platform** — S100 family (`s100-ota-gpt.json`) and S600 (`s600-ota-gpt.json`, Ubuntu 24.04).
 
 ---
 
-## 7. VDSP:内置向量 DSP(图像/信号前处理卸载)
+## 7. VDSP — on-chip vector DSP
 
-> 来源:`docs/07_Advanced_development/07_vdsp_development.md`(rdk_s_doc)。只写文档有出处的事实;build 包/调试文档需联系地瓜(D-Robotics)获取。
+> Source: `docs/07_Advanced_development/07_vdsp_development.md` (rdk_s_doc). Only documented facts; the build package / debug docs require contacting D-Robotics.
 
-**是什么** —— VDSP 是 S 系列 SoC 内置的 **Cadence/Tensilica Xtensa Vision Q8 向量 DSP** 核,作为 Acore(Linux)与 BPU 之外的第三类可编程算力,把图像/信号类前处理从 CPU 卸载。**核数随板型**:**S100 单核 vdsp0;S600 双核 vdsp0+vdsp1**(文档原文「S600 上包含两个 VDSP 核,VDSP1 的使用只有在 S600 上支持」)。所有核共用一个 Firmware,默认名 `vdsp0`。
+**What it is** — VDSP is the S-series SoC's built-in **Cadence/Tensilica Xtensa Vision Q8 vector DSP** core — a third programmable compute domain beyond Acore (Linux) and the BPU — to offload image/signal pre-processing from the CPU. **Core count is board-dependent: S100 single core `vdsp0`; S600 dual core `vdsp0` + `vdsp1`** (the doc: "S600 has two VDSP cores; VDSP1 is supported only on S600"). All cores share one firmware, default name `vdsp0`.
 
-**典型用途** —— 文档 sample 是图像处理(`xi-sample-flip` 翻转、压力用例),基于 RPMSG 做 ARM(client)↔VDSP(server)请求-回复;适合 ISP 之后、BPU 之前的向量化前处理。与 §1 hbmem 零拷贝、§2 IPC 配合(`HB_MEM_USAGE_HW_*` 含 VDSP 标记,buffer 可在 CPU/BPU/ISP/Codec/VDSP/MCU 间零拷贝流转)。
+**Typical use** — the doc sample is image processing (`xi-sample-flip` flip, stress cases) over RPMSG with ARM (client) ↔ VDSP (server) request/reply; ideal for vectorized pre-processing after ISP and before the BPU. Works with §1 hbmem zero-copy and §2 IPC (a buffer flows zero-copy across CPU/BPU/ISP/Codec/VDSP/MCU).
 
-**SDK 两侧**:
-- **Acore(Linux)侧** —— 系统已预装,无需额外 SDK。三库:启停 `libvdsp.so`(头 `hb_vdsp_mgr.h`)、RPMSG `librpmsg.so`、IPCFHAL `libhbipcfhal.so`。
-- **VDSP 固件侧** —— Cadence Xtensa Vision Q8 工具链 **RI-2023.11**;**build 包/xplorer 调试文档不公开,需联系地瓜**;`bash make.sh` 产 `library/libvdsp0.a`,平台用 `export HR_TARGET_PROJECT=S100|S600` 区分。
+**SDK, two sides**:
+- **Acore (Linux) side** — pre-installed, no extra SDK. Three libs: start/stop `libvdsp.so` (header `hb_vdsp_mgr.h`), RPMSG `librpmsg.so`, IPCFHAL `libhbipcfhal.so`.
+- **VDSP firmware side** — Cadence Xtensa Vision Q8 toolchain **RI-2023.11**; the build package / xplorer debug docs are not public — contact D-Robotics. `bash make.sh` produces `library/libvdsp0.a`; select platform via `export HR_TARGET_PROJECT=S100|S600`.
 
-**加载/查看(Acore sysfs)**:
+**Load / inspect (Acore sysfs)**:
 ```bash
-echo -n <firmware绝对路径> > /sys/module/firmware_class/parameters/path
-echo <firmware名称> > /sys/class/remoteproc/remoteproc_vdsp0/firmware   # S600 vdsp1 换 remoteproc_vdsp1
-echo start > /sys/class/remoteproc/remoteproc_vdsp0/state               # 卸载用 echo stop
-cat /sys/class/remoteproc/remoteproc_vdsp0/{state,version}              # running=已加载
+echo -n <firmware-abs-path> > /sys/module/firmware_class/parameters/path
+echo <firmware-name> > /sys/class/remoteproc/remoteproc_vdsp0/firmware   # S600 vdsp1: remoteproc_vdsp1
+echo start > /sys/class/remoteproc/remoteproc_vdsp0/state                # unload: echo stop
+cat /sys/class/remoteproc/remoteproc_vdsp0/{state,version}               # running = loaded
 ```
-心跳监控默认关(`heartbeat_enable`),开后 100ms 周期、连丢 7 次 reset VDSP。
+Heartbeat monitoring is off by default (`heartbeat_enable`); when on it's a 100ms cycle and resets the VDSP after 7 consecutive misses.
 
-**关键接口(`hb_vdsp_mgr.h`)**:`hb_vdsp_init(dsp_id)`(`dsp_id` 0/1,**dsp1 仅 S600**)/ `hb_vdsp_start(dsp_id, timeout, pathname)`(`timeout` 0=异步/-1=同步/>0=带超时ms)/ `_stop`/`_reset`/`_get_status`/`_get_version`;内存 `hb_vdsp_mem_alloc`、SMMU `hb_vdsp_mmu_map`。核间通信:RPMSG 单帧 payload 1~240 字节(同一服务通道不支持并发),IPCFHAL 通道名形如 `cpu-vdsp-ins0ch0`。
+**Key interfaces (`hb_vdsp_mgr.h`)**: `hb_vdsp_init(dsp_id)` (`dsp_id` 0/1, **dsp1 is S600-only**) / `hb_vdsp_start(dsp_id, timeout, pathname)` (`timeout` 0=async / -1=sync / >0=timeout ms) / `_stop` / `_reset` / `_get_status` / `_get_version`; memory `hb_vdsp_mem_alloc`, SMMU `hb_vdsp_mmu_map`. Inter-core: RPMSG single-frame payload 1~240 bytes (no concurrency on one service channel); IPCFHAL channel names like `cpu-vdsp-ins0ch0`.
 
-**板端 sample(开箱即用,无需 DSP 工具链)** —— `/app/vdsp_demo/vdsp_sample`(板上 `make`,`-d` 选核 `-p` 指 FW 路径 `-c` 选用例)、`/app/vdsp_demo/vdsp_ipcfhal_sample`。支持 S100/S600。
+**Board sample (ready to run, no DSP toolchain needed)** — `/app/vdsp_demo/vdsp_sample` (build on-board with `make`; `-d` pick core, `-p` FW path, `-c` pick case) and `/app/vdsp_demo/vdsp_ipcfhal_sample`. Supports S100/S600. Log via `hrut_remoteproc_log -b /sys/class/remoteproc/remoteproc_vdsp0/log -f /log/dsp0/message ...` (vdsp1: dsp1 paths).
 
-**坑(文档明列)**:中断 handler 内不可用 `printf`(会挂死 VDSP);VDSP 日志与 BL31/optee/kernel 共用串口,日志过多触发 watchdog(可 `echo 0 > /proc/sys/kernel/printk`);指针 `int64_t*` 需 8 字节对齐;coredump 落 `/log/coredump/`,用 `xt-gdb` 离线分析。
+**Pitfalls (documented)**: no `printf` inside an interrupt handler (hangs the VDSP); VDSP log shares the serial with BL31/optee/kernel — too much log triggers the watchdog (mitigate with `echo 0 > /proc/sys/kernel/printk`); `int64_t*` pointers need 8-byte alignment; coredumps land in `/log/coredump/`, analyzed offline with `xt-gdb`.
 
-**适用** —— S100(单核)/ S600(双核,VDSP1 专属 S600)。S100P 的 VDSP 核数文档未单独点名,以官方手册为准。
+**Platform** — S100 (single core) / S600 (dual core, VDSP1 S600-only). S100P's VDSP core count is not separately named in the doc — confirm in the official manual.
 
 ---
 
-## 速查:这些主题归谁、典型机器人场景
+## Quick lookup: which topic, which board
 
-| 主题 | 一句话 | 机器人典型场景 | 适用板型 |
-|------|--------|----------------|----------|
-| hbmem | 零拷贝共享内存 + 队列/池 | 相机→BPU→后处理不拷贝大块内存 | S100 / S100P / **S600**(S600 有专属 sample 指南) |
-| Acore IPC | Linux↔MCU/VDSP/BPU 核间通信 + 实时绑核 | 大脑下发指令给小脑硬实时回路 | S100 家族 |
-| PCIe | RC/EP、多板拓扑、加速卡、pub/sub API | S100 当 AI 加速卡 / 多板互联 | S100(SoC S100E)规格 |
-| EtherCAT | IgH 1.5 运动控制主站 | 多轴伺服总线控制 | S100 家族 + **S600**(S600 V5.1.0+ Native 驱动,文档 DocScope 明列) |
-| PTP/gPTP | ptp4l + phc2sys 时间同步 | 多传感器/多轴统一时基 | S100 家族 |
-| OTA / miniboot | AB/BAK + overlayfs / 单独升 miniboot | 量产设备远程升级、bootloader 热修 | S100 家族 |
-| VDSP | 内置 Xtensa Vision Q8 向量 DSP,卸载图像/信号前处理 | ISP 后、BPU 前的向量化前处理(翻转/算子)卸 CPU | S100 单核 / S600 双核(VDSP1 仅 S600) |
+| Topic | One line | Robot scenario | Platform |
+|------|----------|----------------|----------|
+| hbmem | Zero-copy shared memory + queues/pools | camera→BPU→post-process, no large copies | S100 / S100P / **S600** (S600 has its own sample guide) |
+| Acore IPC | Linux↔MCU/VDSP/BPU inter-core comms + real-time pinning | big brain commands the little brain's hard real-time loop | S100 family + **S600** (Acore `[0-63]`) |
+| PCIe | RC/EP, multi-board, accelerator card, pub/sub API | S-board as AI accelerator / multi-board mesh | S100E spec, S100 family |
+| EtherCAT | IgH 1.5 motion-control master | multi-axis servo bus control | S100 V4.0.7+ + **S600 V5.1.0+** (Native default, DocScope-confirmed) |
+| PTP/gPTP | ptp4l + phc2sys time sync | unified time base for multi-sensor/multi-axis | S100 family + S600 |
+| OTA / miniboot | AB/BAK + overlayfs / standalone miniboot | field upgrade, bootloader hot-fix | S100 (`s100-ota-gpt.json`) / **S600 (`s600-ota-gpt.json`, Ubuntu 24.04)** |
+| VDSP | Built-in Xtensa Vision Q8 vector DSP, offload pre-processing | vectorized pre-processing between ISP and BPU | S100 single core / **S600 dual core (VDSP1 S600-only)** |

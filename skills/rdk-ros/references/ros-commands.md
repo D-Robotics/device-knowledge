@@ -1,21 +1,44 @@
-# TROS/ROS2 命令
+# TROS / ROS2 Commands
 
-> 来源:整理自 D-Robotics RDK 官方文档、工具链与社区实践,逐条保留出处链接;由 device-knowledge 知识库忠实转换而来,未改写技术事实。
+> Sources: ROS2 CLI semantics from the ROS2 docs; TROS env paths verified against [D-Robotics/tros_doc](https://github.com/D-Robotics/tros_doc) install/quick-start docs. The "supported boards" column reflects that all RDK boards run ROS2 (Humble on X3/X5/Ultra/S100/S100P, Jazzy on S600).
 
-## ROS2 / TROS 命令
+## Source the environment first
 
-| 命令模式 | 说明 | 风险 | 适用板型 |
+| Board(s) | Command |
+|----------|---------|
+| X3 / X5 / Ultra / S100 / S100P | `source /opt/tros/humble/setup.bash` |
+| S600 | `source /opt/tros/jazzy/setup.bash` |
+
+If `ros2` is still not found after sourcing, some S100/S600 images only configured TROS for the `sunrise` user — `su - sunrise` and retry.
+
+## ROS2 / TROS command reference
+
+| Command | Purpose | Risk | Boards |
 | --- | --- | --- | --- |
-| `ros2\s+launch` | ROS2 launch file execution | moderate | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+run` | ROS2 run single node | moderate | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+topic` | ROS2 topic inspection | safe | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+node` | ROS2 node inspection | safe | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+param` | ROS2 parameter query/set | safe | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+service` | ROS2 service call/list | safe | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+action` | ROS2 action send goal / list | safe | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+pkg` | ROS2 package query | safe | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+interface` | ROS2 interface (msg/srv) show | safe | x3/x5/ultra/s100/s100p/s600 |
-| `ros2\s+bag` | ROS2 bag record/play | moderate | x3/x5/ultra/s100/s100p/s600 |
-| `source\s+\/opt\/tros` | TROS environment setup | safe | x3/x5/ultra/s100/s100p/s600 |
-| `colcon\s+build` | ROS2 workspace build | moderate | x3/x5/ultra/s100/s100p/s600 |
-| `rosdep\s+install` | ROS2 dependency install | moderate | x3/x5/ultra/s100/s100p/s600 |
+| `ros2 launch` | Run a launch file (start a node graph) | moderate | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 run` | Run a single node | moderate | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 topic` | Inspect topics (`list` / `echo` / `hz` / `info`) | safe | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 node` | Inspect nodes (`list` / `info`) | safe | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 param` | Query / set node parameters | safe | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 service` | List / call services | safe | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 action` | Send goal / list actions | safe | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 pkg` | Query packages (`list` / `prefix`) | safe | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 interface` | Show msg/srv definitions | safe | x3 / x5 / ultra / s100 / s100p / s600 |
+| `ros2 bag` | Record / play a bag | moderate | x3 / x5 / ultra / s100 / s100p / s600 |
+| `source /opt/tros/...` | Activate the TROS environment | safe | x3 / x5 / ultra / s100 / s100p / s600 |
+| `colcon build --symlink-install` | Build a ROS2 workspace | moderate | x3 / x5 / ultra / s100 / s100p / s600 |
+| `rosdep install` | Install package dependencies | moderate | x3 / x5 / ultra / s100 / s100p / s600 |
+
+## Diagnostic quick-reference
+
+| Goal | Command |
+|------|---------|
+| Is the package installed? | `ros2 pkg list \| grep <name>` |
+| Where is it installed? | `ros2 pkg prefix <name>` |
+| What launch args exist? | `ros2 launch <pkg> <launch.py> --show-args` |
+| Are nodes/topics alive? | `ros2 node list` / `ros2 topic list` |
+| Why does a node fail? | `ros2 run <pkg> <node> --ros-args --log-level debug` |
+| Find a launch file | `find /opt/tros -name "*launch.py"` (D-Robotics packages mostly use `*_launch.py`) |
+| After a custom build | `source install/setup.bash && ros2 pkg list \| grep <pkg>` |
+
+Resolve absolute paths on the actual board (`ros2 pkg prefix` / `find`); never carry a relative config path across working directories.

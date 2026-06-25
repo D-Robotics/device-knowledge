@@ -1,56 +1,137 @@
 ---
 name: rdk-system-config
-description: 当用户要做 RDK 系统级配置工作流时使用——配 Wi-Fi/蓝牙/有线网(nmcli、wifi_connect、/etc/NetworkManager 或 /etc/network/interfaces)、配 DNS/代理、改 config.txt 启动配置(X 系的 dtparam/gpio/arm_boost/过滤项,或 S 系的 bootargs/fdt-enable/dtbo)、调 CPU/BPU 频率与性能模式(scaling_governor/boost)与温控风扇、设开机自启动服务(init.d/rc.local)、配 Samba/NFS 文件共享、用 srpi-config TUI 各菜单(System/Interface/Performance/Localisation/Advanced)。本 skill 是"配置怎么做"的工作流入口。边界:查单条命令语法/选项走 rdk-command-manual;摄像头/GPIO/I2C/串口/PWM 外设驱动配置走 rdk-peripheral-cookbook;出了报错按现象排障走 rdk-board-knowledge;定位文档站章节走 rdk-doc-finder。
+description: How-to workflows for RDK board system configuration — wired/Wi-Fi/Bluetooth networking (nmcli, wifi_connect, NetworkManager vs /etc/network/interfaces), DNS/proxy, the /boot/config.txt boot file (X-series dtparam/gpio/arm_boost/filters vs S-series bootargs/fdt-enable/dtbo), CPU frequency locking and overclock, thermal trip points and emc2305 fan control, boot self-start services, Samba/NFS file sharing, and the srpi-config TUI. Use whenever a user asks "how do I configure X on this board" and wants concrete steps (commands / menus / config-file edits), the right per-board method, and the X-vs-S difference. 触发词:配网/连WiFi/有线静态IP/改config.txt/改启动配置/CPU锁频/降频/超频/调频/风扇控制/温控/开机自启/自启动/Samba/NFS共享/srpi-config菜单/蓝牙配对/DNS/代理. Routing — single-command syntax lookup → rdk-command-manual; camera/GPIO/I2C/SPI/UART/PWM device drivers → rdk-peripheral-cookbook; errors AFTER configuring → rdk-board-knowledge; doc-site URLs/chapters → rdk-doc-finder; pure pin/hardware facts → rdk-hardware.
 ---
 
-# RDK 系统配置(联网 / 显示 / 调频 / 自启动 / 文件共享 / srpi-config)
+# RDK System Configuration
 
-> 来源:整理自 D-Robotics 官方文档 `D-Robotics/rdk_x_doc` 与 `D-Robotics/rdk_s_doc` 的 `docs/02_System_configuration`(X 系 5 篇:network_blueteeth / srpi-config / config_txt / frequency_management / self_start;S 系 7 篇:多 gui_network_config 与 share_file_tool)。只转述文档确有的事实,逐项保留板型适用范围与 X/S 差异。
+Turn a "how do I configure …" question into the exact commands, srpi-config menu path, or `/boot/config.txt` edit for the user's board — and never let an X-series recipe leak onto an S-series board (or vice versa). **The single thing that matters most: X-series and S-series are two different systems.** Confirm which family you are on before quoting any method.
 
-## 何时用
+> Sources: official D-Robotics docs `D-Robotics/rdk_x_doc` and `D-Robotics/rdk_s_doc`, directory `docs/02_System_configuration` (X: 5 files network_blueteeth / srpi-config / config_txt / frequency_management / self_start; S: 7 files, additionally gui_network_config and share_file_tool). Every non-trivial fact below was re-verified against these files; nothing is invented.
 
-用户问"这块板该怎么配 Wi-Fi/有线网/蓝牙、怎么改启动配置、怎么把 CPU 锁到最高频/降频、怎么设开机自启、怎么搭 Samba/NFS 共享、srpi-config 某个菜单干什么"——以**配置任务为锚点查实操步骤(命令/菜单/配置文件)、适用板型、X 与 S 差异**时用本 skill。
+## Confirm the board first
 
-边界(避免与兄弟 skill 重叠):
-- **只想查某条命令的语法/选项/作用**(如 `hrut_somstatus` 怎么读、`srpi-config` 有哪些菜单一句话)→ `rdk-command-manual`。
-- **外设驱动与接线**(摄像头 MIPI、GPIO 读写、I2C/SPI/串口/PWM 设备)→ `rdk-peripheral-cookbook`;本 skill 只覆盖 config.txt/srpi-config 里"开关总线"那一层。
-- **配完报错、按现象排障** → `rdk-board-knowledge`。
-- **要官方文档站 URL/章节定位** → `rdk-doc-finder`;**纯硬件/引脚事实** → `rdk-hardware`。
+X and S diverge on networking, config.txt syntax, frequencies, thermal zones, and which tools exist. Probe before answering:
 
-## 板型基线(决定用哪套做法)
+```bash
+cat /sys/class/socinfo/board_id   # or: cat /etc/version, hrut_somstatus
+which srpi-config                  # exists on X3/X5/X3 Module; S100 too; NOT on Ultra
+cat /boot/config.txt              # X and S use the SAME path, COMPLETELY different syntax
+nmcli device                      # network manager present?
+```
 
-| 维度 | X 系列(rdk_x_doc) | S 系列(rdk_s_doc) |
-| --- | --- | --- |
-| 覆盖板型 | X3(Bernoulli2)、X5 / Ultra(Bayes) | S100 / S100P / S600(Nash) |
-| 系统 | Ubuntu 22.04 / Humble | S100 22.04 / Humble;S600 24.04 + Jazzy |
-| 有线网 | 新版 NetworkManager,旧版 /etc/network/interfaces | 仅 NetworkManager+Netplan / nmcli,不支持 ifup/ifdown |
-| Soft AP | 支持(hostapd 或 NM Hotspot,X5 可 5G) | 文档标注"暂不可用" |
-| config.txt | /boot/config.txt(uboot 读),dtparam/gpio/arm_boost/过滤项 | /boot/config.txt(地瓜 Uboot),bootargs/fdt-enable/dtbo;**语法与 X 完全不同** |
-| srpi-config | X3 / X5 / X3 Module(**不适用 Ultra**) | 文档示例为 S100(无 Display/Sensor Profiles 菜单) |
-| GUI 配网 / 文件共享 | 文档无独立章节 | 独有 2.6 GUI 配网、2.7 Samba/NFS |
+## Board baseline cheat-sheet (decides which recipe to use)
 
-> 拿不准目标板某做法是否适用,先在板上确认(`which srpi-config`、`cat /boot/config.txt`、`nmcli device`),再按对应系套用。
+| Dimension | X-series (`rdk_x_doc`) | S-series (`rdk_s_doc`) |
+|---|---|---|
+| Boards | X3 (Bernoulli2), X5 (Bayes-e), Ultra (Bayes) | S100 (Nash-e) / S100P (Nash-m), S600 (Nash-p) |
+| OS / ROS | Ubuntu 22.04 + Humble | S100/S100P: 22.04 + Humble · S600: **24.04 + Jazzy** |
+| Wired net | New: NetworkManager · Old: `/etc/network/interfaces` | NetworkManager + Netplan / nmcli only; **no ifup/ifdown** |
+| Soft AP | Supported (hostapd or NM Hotspot; X5 can do 5G) | Doc marks **"not yet available"** |
+| config.txt | `/boot/config.txt` (uboot) — `dtparam`/`gpio`/`arm_boost`/`[filters]` | `/boot/config.txt` (D-Robotics Uboot) — `bootargs`/`fdt-enable`/`dtbo`; **syntax totally different** |
+| srpi-config | X3 / X5 / X3 Module (**NOT Ultra**) | Doc example is S100 (no Display, no Sensor Profiles menu) |
+| GUI config / file share | No standalone doc chapter | Has its own 2.6 GUI networking + 2.7 Samba/NFS |
 
-## 各配置任务速记
+> Canonical board fact (carry consistent across all skills): the **S100/S600 management port `eth1` is factory-fixed at `192.168.127.10`**; X-series default wired IP is also `192.168.127.10`. The S-series doc's nmcli examples use a sample `192.168.10.100/24` connection named `eth1_cfg` — substitute the real connection name from `nmcli connection show`.
 
-下表只给"做什么 + 走哪条路";**完整命令/菜单/配置文件内容、X 与 S 逐项差异、出处**见 [系统配置详表](references/system-config.md)。
+## Task → route map
 
-| 任务 | X 系做法 | S 系做法 |
-| --- | --- | --- |
-| 有线静态/DHCP IP | 改 `netplan-eth0.nmconnection`(新)或 `/etc/network/interfaces`(旧),`sudo restart_network` | `nmcli connection modify` 改 ipv4.method/addresses,`down`/`up` 生效 |
-| Wi-Fi 连接(Server) | `sudo nmcli device wifi rescan/list` + `sudo wifi_connect "SSID" "PASSWD"` | 同 X |
-| Wi-Fi 热点(AP) | hostapd + isc-dhcp-server,或 NM `Hotspot` | 暂不可用 |
-| 蓝牙 | `/usr/bin/startbt.sh` 初始化 + `bluetoothctl`(power on/scan/pair/trust) | `bluetoothctl`(S 文档无 startbt.sh 步骤) |
-| DNS / 代理 | 改 `/etc/systemd/resolved.conf` | 同 X;代理另可 `~/.bashrc` 或 `/etc/environment` 设 `http_proxy` 等 |
-| 改启动配置 | `/boot/config.txt`:dtparam 开关总线、gpio 复用、arm_boost/governor 调频、throttling_temp/shutdown_temp | `/boot/config.txt`:bootargs/loglevel/fdt-enable/fdt-disable/dtbo_file_path |
-| CPU 调频/锁频 | `echo perf/userspace > .../policy0/scaling_governor`,X3 boost 1.2→1.5G、X5 boost 1.5→1.8G(仅 X5H) | `echo ... > cpu0/cpufreq/scaling_governor`;S100 1.5/2.0G、S600 0.525/1.05/2.1G |
-| 温控 / 风扇 | 改 `thermal_zoneN/trip_point_*_temp`(X3 单 zone、X5 双 zone) | S100 5 zone、S600 19 zone;风扇 emc2305 需把对应 zone policy 设 `user_space` 再写 `cooling_deviceN/cur_state` |
-| 开机自启动 | `/etc/init.d` + `update-rc.d defaults` + `systemctl enable`,或 `/etc/rc.local` | 与 X 完全相同 |
-| 文件共享 | 文档无独立章节 | Samba(`smb.conf` [shared] + `smbpasswd -a sunrise`)、NFS 客户端(`mount -t nfs`) |
-| GUI 配网 | 文档无独立章节 | settings → Network 配静态 IP/DNS/Proxy |
-| srpi-config TUI | System/Display/Interface/Performance/Localisation/Advanced/Sensor Profiles | System(多 Update Miniboot)/Interface(仅 SSH)/Performance(仅 ION)/Localisation/Advanced;**无 Display、无 Sensor Profiles** |
+Full commands, menus, config-file bodies, item-by-item X/S differences, and provenance are in **[system-config.md](references/system-config.md)**. A deterministic lookup for "which sysfs path / value for thermal & CPU freq on board X" is `scripts/sysconf_lookup.py`.
 
-## 参考资料
+| Task | X-series method | S-series method |
+|---|---|---|
+| Static / DHCP wired IP | Edit `netplan-eth0.nmconnection` (new) or `/etc/network/interfaces` (old), then `sudo restart_network` | `nmcli connection modify` ipv4.method/addresses, then `down`/`up` |
+| Wi-Fi connect (Server) | `sudo nmcli device wifi rescan`/`list` + `sudo wifi_connect "SSID" "PASSWD"` | Same as X |
+| Wi-Fi hotspot (AP) | hostapd + isc-dhcp-server, or NM `Hotspot` (X5 can do 5G) | Not yet available |
+| Bluetooth | `/usr/bin/startbt.sh` init + `bluetoothctl` (power on/scan/pair/trust) | `bluetoothctl` (no startbt.sh step; adds `bluetoothctl list`) |
+| DNS / proxy | DNS via `/etc/systemd/resolved.conf` | Same DNS; proxy via `~/.bashrc` or `/etc/environment` |
+| Edit boot config | `/boot/config.txt`: dtparam buses, gpio mux, arm_boost/governor, throttling/shutdown temp | `/boot/config.txt`: bootargs/loglevel/fdt-enable/fdt-disable/dtbo_file_path |
+| CPU freq / lock | `scaling_governor` on `policy0`; boost: X3 1.2→1.5G, X5 1.5→1.8G (**X5H only**) | `cpu0/cpufreq/scaling_governor`; S100 1.5/2.0G, S600 0.525/1.05/2.1G; **no overclock** |
+| Thermal / fan | Set `thermal_zoneN/trip_point_*_temp` (X3 1 zone, X5 2 zones) | S100 5 zones, S600 19 zones; fan: set zone `policy=user_space` then write `cooling_deviceN/cur_state` |
+| Boot self-start | init.d + `update-rc.d defaults` + `systemctl enable`, or `/etc/rc.local` | **Identical to X** |
+| File share | No doc chapter | Samba (`smb.conf [shared]` + `smbpasswd -a sunrise`), NFS client (`mount -t nfs`) |
+| GUI networking | No doc chapter | settings → Network: static IP / DNS / Proxy |
+| srpi-config TUI | System/Display/Interface/Performance/Localisation/Advanced/Sensor Profiles | System (adds Update Miniboot) / Interface (SSH only) / Performance (ION only) / Localisation / Advanced; **no Display, no Sensor Profiles** |
 
-- [系统配置详表(各项命令/菜单/配置文件 + X 与 S 差异 + 出处)](references/system-config.md)
-- 单条命令语法 → `rdk-command-manual`;配置后报错 → `rdk-board-knowledge`;外设驱动 → `rdk-peripheral-cookbook`
+## Workflows
+
+### Workflow 1 — Network configuration
+
+1. **Probe the family and version.** `nmcli device` (present → NetworkManager path). For X-series, version gates the method: X5 ≥ 3.3.0 / X3 ≥ 3.0.2 use NetworkManager; older use `/etc/network/interfaces`.
+2. **Wired static IP.**
+   - X new / S: NetworkManager. X edits `netplan-eth0.nmconnection` `[ipv4] address1=…/24,gateway` + `method=manual` + `route-metric=700`, then `sudo restart_network`. S uses `nmcli connection modify "<conn>" ipv4.method manual ipv4.addresses …` then `nmcli connection down/up "<conn>"`.
+   - X old: edit `/etc/network/interfaces` `iface eth0 inet static`, then `sudo restart_network`.
+   - `route-metric/metric=700` is **intentional** — it lowers wired priority so Wi-Fi wins when both are up. Do not "fix" it.
+3. **Wi-Fi (both families).** Desktop: click the tray Wi-Fi icon. Server: `sudo nmcli device wifi rescan` → `list` → `sudo wifi_connect "SSID" "PASSWD"`. `Scanning not allowed immediately…` = scanned too recently, wait; `No network with SSID … found` = rescan.
+4. **Soft AP.** X-series only (hostapd+isc-dhcp-server, or NM Hotspot; X5 can host 5G with `channel=36 hw_mode=a`). On S-series the doc says AP mode is **not yet available** — do not hand the user a hostapd recipe.
+5. **DNS** (both): add `DNS=…` to `/etc/systemd/resolved.conf`, restart `systemd-resolved`, relink `/etc/resolv.conf`. **Proxy** (S doc): `http_proxy/https_proxy/no_proxy` in `~/.bashrc` (current user) or `/etc/environment` (all users).
+
+### Workflow 2 — Edit /boot/config.txt (X and S are two different mechanisms)
+
+**X-series** (X3/X5/X3 Module; system ≥ 2.1.0, miniboot ≥ 20231126; edit as root):
+1. Toggle buses: `dtparam=i2c5=on`, `dtparam=uart3=off`. Mind X5 pin multiplexing (one row → one function).
+2. CPU freq: `arm_boost=1` (X3→1.5/1.8G, X5→1.8G), `governor=performance`, or `governor=userspace` + `frequency=…`.
+3. GPIO init: `gpio=5=f3` (mux), `ip`/`op`, `dh`/`dl`, `pu`/`pd`/`pn` (BOARD numbering).
+4. Thermal: `throttling_temp=86000`, `shutdown_temp=112000`.
+5. `[all]/[rdkv1]/[rdkv2]/[rdkmd]/[x5-rdk]` filters scope everything **after** them to that model.
+
+**S-series** (D-Robotics Uboot; priority `setenv > config file > last saveenv`; one line ≤1024 chars; unusable when AVB is enabled, which is off by default):
+1. `bootargs=isolcpus=1-2` (kernel cmdline), `loglevel=8`.
+2. `fdt-enable=/soc/uart@394C0000;` / `fdt-disable=…;` — the trailing `;` is **mandatory**; get the node path from `/proc/device-tree` and prefix `/`.
+3. DTB overlay: `dtc -I dts -O dtb -o x.dtbo x.dtso` → copy to `/boot` → `dtbo_file_path=/x.dtbo`.
+4. There is **no** X-style `dtparam`/`gpio`/`arm_boost`/filter syntax on S.
+
+### Workflow 3 — CPU frequency, thermal, and fan
+
+1. **Read state:** `sudo hrut_somstatus` on both families. All `trip_point` edits and sysfs governor changes **reset on reboot** — to persist, add to boot self-start (Workflow 5).
+2. **Lock the CPU clock:** `echo userspace > .../scaling_governor` then write `scaling_setspeed`. Path differs: X3 uses `cpufreq/policy0/`, X5/S use `cpu0/cpufreq/scaling_governor` + `policy0/scaling_setspeed`. Valid freqs: X3 240000–1800000, X5 300000/600000/1200000/1500000, S100 1500000/2000000, S600 525000/1050000/2100000 (per-chip).
+3. **Overclock:** X3 `echo 1 > .../cpufreq/boost` (1.2→1.5G) + performance; X5 boost 1.5→1.8G but **X5H only** (`cat /sys/class/socinfo/soc_name`; X5M cannot, X5U is unlocked but unsupported for mass production). **S-series has no overclock.**
+4. **Fix the fan speed (S only):** S100 fan = `cooling_device2`, bound to `thermal_zone0`. S600 fans = `cooling_device5/6`, bound to `thermal_zone2` and `thermal_zone16`. First set the bound zone `policy` to `user_space`, **then** `echo <0-10> > cooling_deviceN/cur_state` — under `step_wise` the system overrides your value by temperature.
+
+### Workflow 4 — Boot self-start (identical on X and S)
+
+1. Create `/etc/init.d/your_script` with an `### BEGIN/END INIT INFO` header (`Default-Start: 2 3 4 5`, `Default-Stop: 0 1 6`), body `/path/to/program &` + `exit 0`.
+2. `sudo chmod +x /etc/init.d/your_script`
+3. `sudo update-rc.d your_script defaults`
+4. `sudo systemctl enable your_script`
+5. Reboot, verify `systemctl status your_script.service` (`active (exited)` = OK).
+- Alternative: insert commands before `exit 0` in `/etc/rc.local` (legacy under systemd).
+
+### Workflow 5 — File sharing (S-series only)
+
+- **Samba:** `apt install samba` → `mkdir ~/shared` → add `[shared]` block to `/etc/samba/smb.conf` (`read only=no`, `guest ok=no`, masks `0775`) → `sudo smbpasswd -a sunrise` → `sudo systemctl restart smbd`. Open the port with `sudo ufw allow samba` only if ufw is on.
+- **NFS client:** `apt install nfs-common` → `mkdir -p /userdata/...` → `sudo mount -v -t nfs -o vers=3,proto=tcp <server>:/path /userdata/...`. For auto-mount on boot, install the `mount-windows-nfs.service` oneshot unit (see reference).
+
+## Worked examples
+
+**Example 1 — "S600 上怎么把 CPU 锁到最高频?"**
+*"S600 supports 525000 / 1050000 / 2100000 kHz (per chip). Lock the max: `echo userspace > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` then `echo 2100000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_setspeed`. Note: S-series has no boost/overclock — 2.1 GHz is the ceiling. The setting resets on reboot, so add it to a boot self-start script if you need it to persist."*
+
+**Example 2 — "我的 X5 风扇一直响,想固定风扇转速怎么搞?"**
+First check the board: dedicated fan-speed sysfs control with `cooling_deviceN` is documented for **S100/S600**, not X5 (X5 thermal has cpu/bpu/gpu/ddr cooling devices but no emc2305 fan stage). If they are actually on **S100**: *"Fan is `cooling_device2` bound to `thermal_zone0`. Set the zone to manual first — `echo user_space > /sys/class/thermal/thermal_zone0/policy` — then `echo 10 > /sys/class/thermal/cooling_device2/cur_state` (0=off … 10=full). Under the default `step_wise` policy the system would override your value by temperature."* If it's really X5, route the fan-hardware question to rdk-peripheral-cookbook / rdk-hardware.
+
+**Example 3 — "刚拿到 S600,怎么用命令行给 eth1 配个静态 IP?"**
+*"S600 (Ubuntu 24.04) uses NetworkManager + Netplan; `ifup/ifdown` is unsupported. Find the connection name with `nmcli connection show`, then: `nmcli connection modify "<conn>" ipv4.method manual ipv4.addresses 192.168.10.100/24 ipv4.gateway 192.168.10.1 ipv4.dns "223.5.5.5 8.8.8.8" connection.autoconnect yes`, then `nmcli connection down "<conn>"; nmcli connection up "<conn>"`. The factory eth1 management IP is 192.168.127.10 — don't lock yourself off the port you're connected through."*
+
+**Example 4 — "X5 上想关掉 uart3、打开 i2c5,改 config.txt 行不行?"**
+*"Yes, on X5 use `/boot/config.txt` dtparam: `dtparam=uart3=off` and `dtparam=i2c5=on`, edit as root, reboot. Watch X5 pin multiplexing — a row shares pins, only one function per row (e.g. uart3↔i2c5, spi2↔pwm0/pwm1). If you previously enabled it via srpi-config, a config.txt `[filter]` can mask that, so keep them consistent. This is S-vs-X specific: on S-series there is no `dtparam`; you'd use `fdt-enable`/`fdt-disable` with the full device-tree node path instead."*
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+|---|---|
+| Hand an S-series user a hostapd Soft AP recipe | S Soft AP is "not yet available" — say so; only X-series has it |
+| Use `dtparam=`/`gpio=`/`arm_boost=` on S `/boot/config.txt` | S uses `bootargs`/`fdt-enable`/`dtbo`; different mechanism entirely |
+| `ifup eth0` / edit `/etc/network/interfaces` on S | S has no ifup/ifdown — use `nmcli connection modify` |
+| Tell any X5 it can overclock | Only **X5H** can; check `cat /sys/class/socinfo/soc_name` first |
+| `echo` a fan `cur_state` while zone is `step_wise` | Set the zone `policy=user_space` first, else the value is overridden |
+| Promise thermal/freq edits survive reboot | They reset — persist via boot self-start |
+| Suggest `srpi-config` on RDK Ultra | srpi-config is X3/X5/X3 Module (+S100), not Ultra |
+| Drop the trailing `;` in S `fdt-enable=…` | The `;` is mandatory; node path comes from `/proc/device-tree` with a leading `/` |
+
+## Reference map
+
+| Read this | When |
+|---|---|
+| [system-config.md](references/system-config.md) | Full per-task commands, srpi-config menu trees, config.txt bodies, every X/S difference, thermal-zone/trip-point tables, Samba/NFS unit files, with provenance |
+| `scripts/sysconf_lookup.py` | Deterministic "board → CPU freq points / governor path / thermal-zone & fan cooling-device mapping" lookup, so you don't recite per-board sysfs from memory |

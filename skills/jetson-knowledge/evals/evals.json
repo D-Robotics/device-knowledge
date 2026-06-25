@@ -1,0 +1,63 @@
+{
+  "skill_name": "jetson-knowledge",
+  "description": "Test prompts that verify jetson-knowledge triggers and produces correct, NVIDIA-official Jetson facts. Prompts are written the way a real developer would phrase them (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "orin-nano-tops-super",
+      "prompt": "Jetson Orin Nano 到底多少 TOPS？",
+      "expected_output": "67 TOPS (INT8 Sparse) for the 8GB/Super module under JetPack 6.2 Super Mode; 34 for the 4GB; notes the old 40 figure is stale.",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "States Orin Nano 8GB / Super is 67 TOPS (INT8 Sparse)." },
+        { "id": "1b", "text": "Attributes the number to JetPack 6.2 Super Mode (and/or notes the pre-Super 40 TOPS is the old value)." },
+        { "id": "1c", "text": "Does NOT simply answer 40 TOPS as the current figure." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "jetson-nano-jetpack6",
+      "prompt": "我的 Jetson Nano 能升级到 JetPack 6 吗？算力多少 TOPS？",
+      "expected_output": "No — original Nano caps at JetPack 4.6.x (EOL); JetPack 5/6 only support Orin/Xavier. Nano has no INT8 accel — 472 GFLOPS FP16, not a TOPS figure.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "Says the original Jetson Nano cannot run JetPack 6 (caps at JetPack 4.6.x / EOL)." },
+        { "id": "2b", "text": "Does NOT give the Nano an INT8 TOPS number; says ~472 GFLOPS FP16 (no INT8 tensor acceleration)." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "trtexec-engine-build",
+      "prompt": "怎么在 Orin NX 上把我的 onnx 模型跑起来，而且要尽量快？",
+      "expected_output": "Set power mode (nvpmodel) + jetson_clocks, build a TensorRT engine on the target board with trtexec (--fp16/--int8/DLA), engines are device+version specific.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Says to build a TensorRT engine with trtexec (e.g. --onnx ... --saveEngine ... --fp16)." },
+        { "id": "3b", "text": "Mentions setting the power mode (nvpmodel) and/or jetson_clocks before benchmarking." },
+        { "id": "3c", "text": "Notes the engine must be built on the target Jetson (not portable across boards / JetPack versions), or mentions INT8/DLA for more speed." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "xavier-nx-arch-jetpack",
+      "prompt": "Xavier NX 是什么架构？最高能装哪个 JetPack？",
+      "expected_output": "Volta GPU, 21 TOPS, caps at JetPack 5.1.x (no JetPack 6).",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "Says Xavier NX is Volta architecture (not Ampere)." },
+        { "id": "4b", "text": "Says it caps at JetPack 5.1.x and does not get JetPack 6." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "route-rdk-vs-jetson",
+      "prompt": "我在 Jetson Orin Nano 和 RDK X5 之间纠结，买哪个好？",
+      "expected_output": "Provides Jetson specs but routes the cross-platform buying decision to rdk-ecosystem (which owns RDK-vs-Jetson comparison).",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "Provides Orin Nano specs (e.g. 67 TOPS / Ampere) as input." },
+        { "id": "5b", "text": "Indicates the RDK-vs-Jetson selection/comparison belongs to rdk-ecosystem rather than making the buying call here." }
+      ]
+    }
+  ]
+}

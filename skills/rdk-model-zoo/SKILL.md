@@ -1,76 +1,116 @@
 ---
 name: rdk-model-zoo
-description: 当用户想用 RDK Model Zoo 的现成 BPU 模型(分类/检测/分割/姿态/OCR/感知类多模态)、问某模型有没有官方转好的 .bin/.hbm、怎么跑 Model Zoo 示例、用哪个分支、hbm_runtime 怎么调、或从哪下预编译模型时使用。本 skill 讲"取现成模型直接跑";自己从 .pt/.onnx 走工具链量化转换走 rdk-device,把模型跑成 ROS 节点走 rdk-ros,对话式 LLM/VLM(InternVL/SmolVLM 聊天问答)走 rdk-llm-deployment,选型/能不能跑某模型走 rdk-ecosystem。
+description: Run a ready-made, officially pre-compiled BPU model from the RDK Model Zoo on a board — pick the right branch (branch = board), download the matching .bin/.hbm, run the sample, read the per-board benchmark (latency/FPS/accuracy). Use whenever the user wants a precompiled model instead of quantizing their own, asks "does RDK have a converted YOLO/classification/segmentation/OCR .bin/.hbm", "how do I run a Model Zoo sample", "which branch for my board", or "where do I download the precompiled model". 触发词:Model Zoo、现成模型、预编译模型、官方转好的、有没有现成的 bin/hbm、模型仓、跑示例 sample、哪个分支、archive.d-robotics 下载、benchmark 帧率精度、YOLO11 哪块板能跑、模型性能对比。Routing — quantizing your OWN .pt/.onnx through the toolchain → rdk-device; wrapping a model as a TROS/ROS2 node → rdk-ros; conversational LLM/VLM (InternVL/SmolVLM chat) → rdk-llm-deployment; "can my board run model X" / model selection → rdk-ecosystem; embodied ACT/VLA/Pi0 policies → rdk-embodied-lerobot.
 ---
 
-# RDK Model Zoo 现成模型部署
+# RDK Model Zoo — Ready-Made BPU Models
 
-> 来源:[D-Robotics/rdk_model_zoo](https://github.com/D-Robotics/rdk_model_zoo)、[rdk_model_zoo_s](https://github.com/D-Robotics/rdk_model_zoo_s) 官方仓库 README 与目录结构,逐条保留出处;技术事实未改写,具体清单以仓库当前分支为准。
+The Model Zoo is the official collection of **out-of-the-box, pre-compiled BPU models** plus full-link conversion tutorials. The single most important fact: **the branch you clone IS your board.** Cloning the wrong branch is the #1 failure — the model artifact or the runtime API will not match your hardware.
 
-## 何时用
+> Sources: official D-Robotics repos verified for this skill — [rdk_model_zoo](https://github.com/D-Robotics/rdk_model_zoo) (`rdk_x5` / `rdk_x3` / `rdk_s` branches), [rdk_model_zoo_s](https://github.com/D-Robotics/rdk_model_zoo_s) (`s100` archive), and [model_zoo_doc](https://github.com/D-Robotics/model_zoo_doc) appendix benchmarks. Facts carry provenance; nothing is invented.
 
-用户想**直接拿官方转好的 BPU 模型跑起来**(而不是自己从头量化),或问"YOLO/分类/分割/OCR/多模态有没有现成 `.bin`/`.hbm`""Model Zoo 示例怎么跑""用哪个分支""下载在哪"时用本 skill。
-要自己把私有 `.pt`/`.onnx` 走 `hb_mapper` 量化成 `.bin` → rdk-device;要把模型封装成 TROS/ROS2 节点跑 → rdk-ros;只是想知道"我这块板能不能跑 X" → rdk-ecosystem。
+## The one rule that matters most
 
-**一句话定位**:Model Zoo 是"出厂即用的 BPU 模型仓 + 全链路转换教程",覆盖 `原始模型(PyTorch/ONNX) → 定点量化 → 板端推理 → 后处理 → 示例验证` 全过程,让你用最小成本跑通 BPU。
+**Branch = board.** Confirm the board first (`cat /sys/class/socinfo/board_id`, or `rdkos_info` for the full OS/board summary), then clone exactly that branch. A `.bin` (Bayes / Bernoulli2) and a `.hbm` (Nash) are **never** interchangeable, and the Python runtime import differs by branch. Do not recite directory or model names from memory — `ls samples/` on the actual checked-out branch is the source of truth.
 
-## 最高频要点 — 选对分支(分支 = 你的板型)
+## Branch → board cheat-sheet (the foundation)
 
-Model Zoo **按硬件分分支**,克隆错分支是第一坑。先确认板型(`cat /sys/class/socinfo/board_id`)再选分支:
+| Board | Repo | Branch | Sample dir | Artifact | Python runtime |
+|-------|------|--------|-----------|----------|----------------|
+| RDK X5 | `rdk_model_zoo` | `rdk_x5` | `samples/vision/<model>/` | `.bin` | `hbm_runtime` |
+| RDK X5 (legacy) | `rdk_model_zoo` | `rdk_x5_legacy` | (old demos) | `.bin` | `hobot_dnn` / `pyeasy_dnn` |
+| RDK X3 | `rdk_model_zoo` | `rdk_x3` | `demos/<task>/` (note: `demos/`, not `samples/`) | `.bin` | `pyeasy_dnn` / `hobot_dnn` |
+| RDK S100 / S100P / S600 | `rdk_model_zoo` | `rdk_s` | `samples/vision/<model>/` | `.hbm` | `hbm_runtime` |
+| RDK S100 / S100P (archive) | `rdk_model_zoo_s` | `s100` | `samples/Vision/<Model>/` | `.hbm` | `hbm_runtime` |
 
-| 板型 | 分支 | 说明 |
-| --- | --- | --- |
-| RDK X5 | `rdk_x5` | **主交付分支**(推荐)。要求 RDK OS ≥ 3.5.0(Ubuntu 22.04 aarch64 + TROS-Humble) |
-| RDK X5 旧 demo | `rdk_x5_legacy` | 原 `main` 改名而来,仅作历史归档,新项目别用 |
-| RDK X3 | `rdk_x3` | X3 设备分支 |
-| RDK S100 / S100P | 两处并存,**都含完整可跑 sample**:① 独立仓 [rdk_model_zoo_s](https://github.com/D-Robotics/rdk_model_zoo_s) 的 `s100` 分支(`samples/Vision/`+`samples/Speech/`);② `rdk_model_zoo` 的 `rdk_s` 分支(`samples/vision/<m>/` 含 conversion+evaluator+model+runtime,同样下了能跑,型号更全) | 产物 `.hbm`。**口径有矛盾**:rdk_model_zoo 主 README 把 rdk_model_zoo_s 称为"历史归档",但 rdk_model_zoo_s 又是 S100 默认分支且 model_zoo_doc 附录据其出。**两处都看,以板型分支实际 `ls samples/` 为准** |
-| RDK S600 | `rdk_model_zoo` 仓 `feat/add-samples-s600-support`(开发中) | S600 视觉/语音 sample 在此开发分支(S100/S600 共用);model_zoo_doc 附录目前只给 S600 的 LLM benchmark。取用前确认是否已合入正式分支 |
+Verified against the live `rdk_x5` and `rdk_s` branch READMEs. The `rdk_s` branch is now the **single current delivery branch for S100, S100P, AND S600** (its README: *"Current branch. Primary delivery branch for RDK S100, S100P, and S600"*). `rdk_model_zoo_s/s100` is the **historical archive** — still complete and runnable, but `rdk_s` is the one to use for new work. A deterministic branch lookup is in `scripts/branch_selector.py`.
 
-```bash
-# 例:X5 取主交付分支
-git clone -b rdk_x5 https://github.com/D-Robotics/rdk_model_zoo.git
-```
+> RDK Ultra is **not** a Model Zoo sample branch — there is no `rdk_ultra` branch and no Ultra appendix. Ultra users convert via the toolchain (`march bayes`, see rdk-device) rather than pulling Model Zoo precompiled artifacts.
 
-## 模型格式与运行时(按板型不通用)
+## Model format & runtime (not portable across families)
 
-- **X5(Bayes-e)** → 产物 `.bin`,当前 `rdk_x5` 分支 Python 用 `hbm_runtime`(`hbm_runtime.HB_HBMRuntime`),也有 C/C++ 接口;旧 demo(`rdk_x5_legacy`)用 `hobot_dnn`/`pyeasy_dnn`。
-- **S100(Nash)** → 产物 **`.hbm`**(不是 `.bin`!),Python 用 **`hbm_runtime`**。S 系列用 `.hbm` 是与 X3/X5 最容易混淆的点。
-- **X3(Bernoulli2)** → `.bin`,经典 `pyeasy_dnn`/`hobot_dnn`。
-- 即便是以 BPU 为主的模型,**输入/输出端通常仍有 CPU 参与的量化/反量化转换**;无法映射到 BPU 的算子也回落 CPU——这是正常现象,不是 bug。
+- **X3 (Bernoulli2)** → `.bin`, classic `pyeasy_dnn` / `hobot_dnn` stack; lightweight models.
+- **X5 (Bayes-e)** → `.bin`. On the `rdk_x5` branch the Python samples use **`hbm_runtime`** (the artifact is still `.bin`, NOT `.hbm`). Only the old `rdk_x5_legacy` branch uses `pyeasy_dnn`/`hobot_dnn`. C/C++ interfaces also ship.
+- **S100 / S100P / S600 (Nash)** → **`.hbm`** (not `.bin`!), Python **`hbm_runtime`**. The `.hbm` artifact is the most common point of confusion versus X3/X5's `.bin`.
+- Even a BPU-centric model usually keeps **CPU-side quantize/dequantize at the input/output**, and any op that cannot map to the BPU falls back to CPU. This is expected, not a bug.
 
-## 快速跑通(以 X5 检测为例)
+## Workflows
 
-注意两个 CWD 不同:模型下到 `model/`,脚本在 `runtime/python/` 下跑,入口固定是 `main.py`(别用 `python3 *.py`,该目录有 5 个 .py 会命中错文件)。
+### Workflow 1 — Pick the branch and run a precompiled model (the core)
 
-```bash
-# 1. 在 model/ 目录下载官方预编译模型
-cd samples/vision/ultralytics_yolo/model
-wget -nc https://archive.d-robotics.cc/downloads/rdk_model_zoo/rdk_x5/ultralytics_YOLO/yolo11x_detect_bayese_640x640_nv12.bin
-# 2. 到 runtime/python/ 用 main.py 推理
-cd ../runtime/python
-python3 main.py --task detect \
-  --model-path ../../model/yolo11x_detect_bayese_640x640_nv12.bin \
-  --test-img ../../../../../datasets/coco/assets/bus.jpg \
-  --img-save-path ../../test_data/inference_yolo11x.jpg
-```
+**Use when:** "how do I run a Model Zoo sample", "which branch", "where's the precompiled model".
 
-成功标志:生成 `../../test_data/inference_yolo11x.jpg`。`main.py` 不带参数也能跑(默认 yolo11n + bus.jpg);此处显式传 `--model-path` 是因为下载的是 yolo11x。预编译模型下载根:`https://archive.d-robotics.cc/downloads/rdk_model_zoo/<分支>/<模型族>/`。
+1. **Confirm the board** → `cat /sys/class/socinfo/board_id` (or `rdkos_info`), then read the cheat-sheet row.
+2. **Clone the matching branch** (the whole point):
+   ```bash
+   git clone -b rdk_x5 https://github.com/D-Robotics/rdk_model_zoo.git   # X5
+   git clone -b rdk_s  https://github.com/D-Robotics/rdk_model_zoo.git   # S100/S100P/S600
+   git clone -b rdk_x3 https://github.com/D-Robotics/rdk_model_zoo.git   # X3
+   ```
+3. **Download the precompiled artifact** into the sample's `model/` dir. The download root is
+   `https://archive.d-robotics.cc/downloads/rdk_model_zoo/<branch>/<MODEL_FAMILY>/<file>`.
+   Filenames encode quantization + input layout, e.g. `yolo11x_detect_bayese_640x640_nv12.bin`
+   (`bayese` = Bayes-e quantized, `nv12` = input layout).
+4. **Run from the right CWD.** Sample dirs are layered `conversion/` + `evaluator/` + `model/` + `runtime/{cpp,python}/` + `test_data/`. The Python entry point is **`main.py`** — do NOT `python3 *.py` (the runtime dir holds `main.py` plus per-task scripts, so a glob hits the wrong file).
+   ```bash
+   cd samples/vision/ultralytics_yolo/runtime/python
+   python3 main.py --task detect \
+     --model-path ../../model/yolo11n_detect_bayese_640x640_nv12.bin \
+     --test-img ../../../../../datasets/coco/assets/bus.jpg \
+     --img-save-path ../../test_data/inference_yolo11.jpg
+   ```
+   `main.py` with no args runs the default (yolo11n + bus.jpg). Success = the output image is written.
+5. **If slow / low FPS**, confirm you are actually running the BPU `.bin`/`.hbm` and not a raw `.pt`/`.onnx` (the latter runs CPU-only → 1–2 FPS; see rdk-device).
 
-## 覆盖的模型类别
+### Workflow 2 — Answer "which models does board X have + how fast" (benchmark lookup)
 
-视觉:图像分类、目标检测、实例/语义分割、姿态估计、OCR(PaddleOCR/LPRNet)、抠图(MODNet);多模态:CLIP 图文匹配。
-检测主力是 `ultralytics_yolo` / `ultralytics_yolo26`(检测/分割/姿态/分类多任务),另含 `yolov5`、`yoloworld`(开放词汇检测)、`yoloe`(实例分割)、`vargconvnet`(分类)等。
+**Use when:** the user asks whether a specific model runs on their board, or wants latency/FPS/accuracy figures.
 
-### 逐板型支持矩阵(各板官方实测了哪些型号)
+1. Map board → appendix chapter set (model_zoo_doc `docs/appendix/<board>/`):
+   - **X5** (6 chapters): classification, detection, segmentation, pose, OCR, matting — with **Float vs Quant Top-1** and **PyTorch AP vs Python (on-board) AP** so you can judge quantization accuracy drop.
+   - **S100/S100P** (7 chapters): classification, detection, segmentation, pose, OCR, depth estimation, LLM — latency + single/dual-thread FPS.
+   - **X3** (4 chapters): classification, detection, segmentation, OCR — **no pose / matting / depth / LLM**.
+   - **S600** (1 chapter): **LLM benchmark only** in the appendix. S600 vision/speech models exist as runnable samples on the `rdk_s` branch but have no per-model perf appendix yet.
+2. For the per-board, per-model tables (verified figures, branch paths), read [per-board-model-catalog.md](references/per-board-model-catalog.md).
+3. If the appendix has no entry, that means "no published number," **not** "cannot run" — check the `rdk_s`/`rdk_x5` sample README.
 
-- **X5(`.bin`/`rdk_x5` 分支)**:分类/检测/分割/姿态/OCR/抠图全覆盖,附录给量化前后精度(Float vs Quant Top-1、PyTorch vs Python AP)。
-- **X3(`.bin`/`rdk_x3` 分支,目录是 `demos/`)**:分类/检测/分割/OCR;无姿态/抠图/LLM。
-- **S100/S100P(`.hbm`/`rdk_model_zoo_s` 仓 `s100` 分支)**:分类/检测(含 YOLO26 Obb)/分割(含 YOLOE 开放词汇)/姿态/OCR/深度估计 + S100P LLM benchmark。
-- **S600(`.hbm`,新旗舰 Nash)**:model_zoo_doc 附录**目前只给 LLM benchmark**(DeepSeek-R1-Distill-Qwen-1.5B、Qwen3-0.6B/1.7B/4B/8B);**视觉/语音 sample 在 `rdk_model_zoo` 仓 `feat/add-samples-s600-support` 开发分支**(README 写明同时支持 RDKS100/RDKS600);S600 上跑对话式 LLM 的部署见 rdk-llm-deployment。
+### Workflow 3 — Boundary: ready-made vs. convert-it-yourself
 
-完整目录、各 sample 用法、运行时接口见 [model-zoo-catalog](references/model-zoo-catalog.md);**每块板逐型号的实测清单(精度/帧率/分支路径)见 [per-board-model-catalog](references/per-board-model-catalog.md)**。
+**Use when:** the user is unsure whether to pull a precompiled model or run the toolchain.
 
-## 与工具链的边界
+- The Model Zoo ships **both** precompiled artifacts (download and run) **and** full conversion tutorials (`conversion/` in each sample). Prefer the precompiled artifact when one exists.
+- For a **private/custom** `.pt`/`.onnx` with no Model Zoo match, the general quantization flow (`hb_mapper` for X-series / `hb_compile` for S-series, calibration images, `march`) lives in **rdk-device**. Use the sample's `conversion/` dir as a worked template.
 
-- Model Zoo 既提供**预编译模型**(下了就跑),也提供**全链路转换教程**(教你把原始模型转成 BPU);两条路都在仓里。
-- 但**通用的私有模型量化**(`hb_mapper checker`/`makertbin`、校准图、`march` 参数)主流程在 rdk-device;Model Zoo 是"有现成的就别自己造"的捷径,以及"照着 sample 学转换"的范例。
+## Worked examples
+
+**Example 1 — "我板子是 S600,Model Zoo 有现成的 YOLO11 吗?用哪个分支?"**
+Yes. Clone the **`rdk_s`** branch of `rdk_model_zoo` (it is the current delivery branch for S100/S100P/S600), get the `.hbm` from `samples/vision/yolo11/model/`, and run with `hbm_runtime`. The README lists YOLO11 as S100/S600-supported. Note: the model_zoo_doc appendix only has an **LLM** benchmark for S600, so for vision perf numbers read the S100 tables as a proxy and confirm on-board.
+
+**Example 2 — "我有一个在 X5 上转好的 .bin,能拷到 S100 上跑吗?"**
+No. X5 `.bin` is Bayes-e; S100 is Nash and needs a `.hbm`. They are cross-architecture incompatible. Pull the S-series precompiled model from the `rdk_s` branch (or rebuild via `hb_compile --march nash-e`, see rdk-device).
+
+**Example 3 — "Model Zoo 示例怎么跑?我下了一堆 .py 不知道跑哪个"**
+Run **`main.py`**, never `python3 *.py`. From the sample, `cd runtime/python`, then `python3 main.py --task detect --model-path ../../model/<file>.bin`. The other `.py` files in that dir are per-task helpers; the glob would hit the wrong one. The default (`main.py` with no args) runs yolo11n on bus.jpg as a smoke test.
+
+**Example 4 — "X5 上 yolo11n 量化后掉多少精度?帧率多少?"**
+Read the X5 detection appendix (`per-board-model-catalog.md` → RDK X5 → detection): yolo11n is ~8.2 ms single-thread, ~122 FPS, PyTorch AP 0.323 → Python (on-board, post-quant) AP 0.308. X5's appendix is the one place that gives Float-vs-Quant and PyTorch-vs-Python AP so you can quantify the drop.
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+|---------|------|
+| Clone `main` / `rdk_x5_legacy` / guess the branch | `git clone -b <board-branch>` — branch = board |
+| Treat `rdk_model_zoo_s/s100` as the only S source | Use `rdk_s` branch of `rdk_model_zoo` for new S100/S100P/S600 work |
+| Copy a `.bin` onto an S-board (or `.hbm` onto X) | Pull the artifact for the matching branch (`.bin` ≠ `.hbm`) |
+| `python3 *.py` in the runtime dir | Run `main.py` with `--task`/`--model-path` |
+| Assume "no appendix entry" = "can't run" | Check the sample README on the board's branch |
+| Expect an `rdk_ultra` Model Zoo branch | Ultra has none — convert via toolchain (rdk-device) |
+| Recite sample/model names from memory | `ls samples/` on the actual checked-out branch |
+
+## Reference map
+
+| Read this | When |
+|-----------|------|
+| [model-zoo-catalog.md](references/model-zoo-catalog.md) | Branch strategy, directory layout, format×runtime table, download path, run checklist — the "how the repo is organized" reference |
+| [per-board-model-catalog.md](references/per-board-model-catalog.md) | Per-board, per-model verified benchmark tables (latency / FPS / accuracy) and exact branch/sample paths — including the S600 LLM numbers and the S100/S600 sample matrix |
+| `scripts/branch_selector.py` | Deterministic board → repo / branch / sample-dir / artifact / runtime lookup |

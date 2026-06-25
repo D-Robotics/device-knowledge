@@ -1,59 +1,137 @@
 ---
 name: rdk-peripheral-cookbook
-description: 当用户要在 RDK 上驱动 GPIO/I2C/SPI/UART、PWM 舵机、直流/步进/无刷电机、LED/WS2812、音频(ALSA),或做外设接线时的跨平台引脚参照、libgpiod、零驱动诊断时使用。本 skill 给外设实操驱动;纯 GPIO 引脚编号事实/各板差异走 rdk-hardware(本 skill 接线时引用它),设备报错排查走 rdk-board-knowledge。
+description: Hands-on peripheral driving on RDK boards — GPIO/I2C/SPI/UART/PWM, servos, DC/stepper/BLDC motors, LED/WS2812, audio (ALSA), and CAN (X5 SocketCAN vs S100/S600 MCU-domain CANHAL) — plus cross-platform pin/bus mapping and zero-driver diagnosis. Use whenever the user wants to actually light an LED, spin a motor, read a sensor, play/record audio, wire a servo, bring up CAN, or when a peripheral plugged into the board is "not detected / no driver". 触发词:点灯、GPIO 不工作、libgpiod、i2cdetect、PCA9685、舵机、步进电机、无刷、WS2812 灯带、ALSA 播放录音、aplay、CAN、SocketCAN、cansend、candump、S100 CAN、S600 自锁口、40PIN 接线、拨码开关、设备不识别没驱动. Routing — pure GPIO pin-number facts / per-board pinout tables → rdk-hardware (cite it when wiring); device error-code lookup / "板子报错" → rdk-board-knowledge; connector/cable/accessory part numbers → rdk-accessories.
 ---
 
-# RDK 外设驱动食谱
+# RDK Peripheral Cookbook
 
-> 来源:整理自 D-Robotics RDK 官方文档、工具链与社区实践,逐条保留出处链接;由 device-knowledge 知识库忠实转换而来,未改写技术事实。
+Drive a real peripheral on an RDK board: GPIO, I2C, SPI, UART, PWM, servos, motors, LEDs, audio, and CAN. **The single rule that prevents the most damage: never power a servo, motor, or LED strip from 40PIN Pin 2/4 (5V) — even one SG90 stall current can brown out the board and reboot it. Always use an external 5V/6V supply and share GND.**
 
-## 何时用
+> Sources: official D-Robotics docs (rdk_doc / rdk_s_doc 40pin user guide, rdk_x5/can.md, mcu_development/09_mcu_can.md), the x5-hobot-io toolchain, and standard cross-platform Linux peripheral practice. Every non-trivial board-specific claim is verified against the cited source; cross-platform Linux facts (libgpiod, ALSA, PCA9685) are standard and noted as such.
 
-要在 RDK 上**真正驱动一个外设**(点灯、转电机、读传感器、播放/录音、接舵机)、做跨平台引脚对照,或外设插上去**板子不识别/没驱动**需要排查时用本 skill。它给的是"怎么接、怎么发命令、怎么定位"的实操路径,不是子系统概念介绍。
+## The one rule that matters most
 
-外设操作按"先扫描确认地址/设备存在,再低频低占空比试探"的安全顺序;含可直接套用的驱动范式。详细接线表、代码与跨平台对照见 [硬件与系统参考](references/hardware-notes.md)。
+A peripheral that needs current — **servo, DC/stepper/BLDC motor, WS2812 strip** — must NOT draw its power from the 40PIN 5V rail (Pin 2/4). Stall or full-load current pulls the rail down and reboots the board. **Always:** external 5V/6V supply for the load, signal line back to the board, **common GND**. This applies on RDK, Raspberry Pi, Jetson, and Rockchip alike — it is not RDK-specific.
 
-## 安全铁律(每次外设供电前必查)
+## Decision cheat-sheet (pick the right approach)
 
-- **舵机/电机/WS2812 灯带绝不从 40PIN Pin 2/4 取 5V**——哪怕单个 SG90,堵转/满载电流可拉低板子 5V 导致重启。一律外接 5V/6V 电源,信号线与板子**共 GND**。
-- I2C 先 `i2cdetect -y <bus>` 确认地址出现再读写;PWM 先低频低占空比试探;改动持久化内核/启动链(`/boot`、设备树、MCU 固件)风险最高,RDK 上非必要不碰。
-- RDK 特有坑:同一 40PIN 引脚可能默认配成 GPIO,需先用 **`sudo srpi-config` → `3 Interface Options` → 总线配置**(或板上 `/app/40pin_samples/` 脚本)切到 I2C/PWM/UART 模式,`/dev/i2c-X`、`pwmchip` 才出现。S100 上 I2C5/UART2 还要拨**拨码开关**二选一。**RDK S600 没有标准 40PIN**(自锁口、1.8V 电平),本食谱的 40PIN 接法不适用 S600,引脚事实见 rdk-hardware。
-
-## 外设范式决策速查
-
-| 需求 | 首选方案 |
+| Need | First-choice approach |
 | --- | --- |
-| 跨板 GPIO / 不确定编号 | **`libgpiod`**(`gpiodetect`/`gpioinfo`/`gpiofind "GPIO17"`),勿猜 BCM 号 |
-| 单舵机(1–2 路) | 板载硬件 PWM(50Hz/20ms,1.0–2.0ms 脉宽),外接电源 |
-| 多舵机(≥3 路) | **PCA9685 + I2C**(默认 `0x40`),舵机电源走 PCA9685 的 V+ 端子 |
-| 直流电机 | H 桥(TB6612/DRV8833/BTS7960)+ PWM 调速 + GPIO 控方向 |
-| 步进电机 | 专用驱动(A4988/DRV8825/**TMC2209** 静音)+ STEP/DIR 两线 |
-| 无刷 BLDC | 航模 ESC(50Hz PWM,可复用 PCA9685)或 ODrive/VESC(UART/CAN 闭环);S100 走 MCU 实时 |
-| WS2812 RGB 灯带 | **SPI MOSI 模拟 800kHz 时序**(2.4MHz,`NeoPixel-SPI`),RPi 的 `rpi_ws281x` 不适用 RDK |
-| 音频(无 TROS) | 标准 **ALSA**(`aplay -l`/`arecord`/`alsamixer`);**USB 声卡是万能兜底** |
-| CAN(RDK 强项) | **仅 X5 是 Linux SocketCAN**(TCAN4550):`ip link set can0 type can bitrate 500000 dbitrate 2000000 fd on` + can-utils。**S100/S600 的 CAN 在 MCU 域**,走 CANHAL/IPC + `/app/Can` sample,**不能用 `ip link`**;X3 无板载 CAN。完整 bringup 见 [CAN 与板级 IO](references/rdk-can-and-board-io.md) |
+| Cross-board GPIO / unsure of pin number | **`libgpiod`** (`gpiodetect` / `gpioinfo` / `gpiofind "GPIO17"`) — don't guess BCM numbers |
+| Single servo (1–2 ch) | On-board hardware PWM (50Hz / 20ms period, 1.0–2.0ms pulse), external supply |
+| Multiple servos (≥3 ch) | **PCA9685 + I2C** (default addr `0x40`), servo power on PCA9685's V+ terminal |
+| DC motor | H-bridge (TB6612 / DRV8833 / BTS7960) + PWM speed + GPIO direction |
+| Stepper motor | Dedicated driver (A4988 / DRV8825 / **TMC2209** silent) + STEP/DIR |
+| Brushless (BLDC) | RC ESC (50Hz PWM, reuse PCA9685) or ODrive/VESC (UART/CAN closed-loop); on S100 use the MCU real-time domain |
+| WS2812 RGB strip | **SPI MOSI emulating the 800kHz timing** (run SPI at 2.4MHz, `NeoPixel-SPI`). RPi's `rpi_ws281x` does NOT work on RDK |
+| Audio (no TROS) | Standard **ALSA** (`aplay -l` / `arecord` / `alsamixer`); **a USB sound card is the universal fallback** |
+| CAN | **Only X5 is Linux SocketCAN** (TCAN4550): `ip link set can0 type can bitrate 500000 dbitrate 2000000 fd on` + can-utils. **S100/S600 CAN lives in the MCU domain** — use CANHAL/IPC + `/app/Can` sample, NOT `ip link`. X3/Ultra have no on-board CAN. Full bringup: [rdk-can-and-board-io.md](references/rdk-can-and-board-io.md) |
 
-## 零驱动诊断 SOP(设备不识别时,9 步通用,勿猜)
+## Safety rules (check before powering any peripheral)
 
-`dmesg | tail -50` → `lsusb` → `ls /dev/`(tty*/video*/i2c-*/spidev*/snd/) → `i2cdetect -l && i2cdetect -y <bus>` → `v4l2-ctl --list-devices` → `aplay -l`/`arecord -l` → `lsmod | grep` → `modinfo`/`modprobe` → `cat /proc/device-tree/…`。完整"症状→诊断"对表与应答模板见 references。
+1. **Never take 5V for servos/motors/WS2812 from 40PIN Pin 2/4.** External 5V/6V supply, common GND with the board.
+2. **Scan before you read/write.** I2C: run `i2cdetect -y <bus>` and confirm the address appears first. PWM: start at low frequency / low duty.
+3. **Persistent kernel/boot changes are the highest risk** (`/boot`, device tree, MCU firmware). On RDK, don't touch them unless necessary.
+4. **RDK-specific trap:** a 40PIN pin may default to GPIO. On X-series, switch the function first via `sudo srpi-config` → `3 Interface Options` → `I3 Peripheral bus config` (or the `/app/40pin_samples/` scripts) before `/dev/i2c-X` or a `pwmchip` appears. **S100** muxes I2C5/UART2 on the 40PIN with a **dip switch** (pick one). **S600 has NO standard 40PIN** — self-locking connectors, 1.8V digital IO; the 40PIN wiring in this cookbook does not apply to S600 (see [rdk-can-and-board-io.md](references/rdk-can-and-board-io.md) §4 and rdk-hardware).
 
-> 应答模板:先问清**板型 + 接口(USB / 40PIN I2C / UART / MIPI)+ 设备型号** → 跑 dmesg/lsusb/ls /dev 让用户贴回 → 按症状表定位 → 给最小可验证命令 → 验证后再谈封装 ROS2 节点/开机自启。
+## Workflows
 
-## 硬件参考主题
+### Workflow 1 — Cross-board GPIO (light an LED, read a button)
 
-以下主题详见 [硬件与系统参考](references/hardware-notes.md):
+**Use when:** 点灯, GPIO 不工作, blink, button read, writing a script meant to run on more than one board.
 
-- X5 板端 IO 加速库（x5-hobot-io / x5-hobot-utils）
-- 40PIN 跨平台引脚与接口深度对照（外设驱动第一步）
-- libgpiod：跨平台通用 GPIO 统一 API（强烈推荐）
-- 舵机控制：单舵机到多路 PCA9685 标准方案
-- 电机驱动三大范式
-- LED：从单色到 WS2812 灯带
-- 音频：ALSA 兜底链路（没装 TROS 时怎么播音 / 录音）
-- 零驱动诊断 SOP（9 步通用外设探测流程）
+1. **Enumerate, don't guess.** `gpiodetect` → lists every gpiochip. `gpioinfo gpiochip0` → shows each line's name.
+2. **Operate by name** for portability: `gpioset $(gpiofind "GPIO17")=1`. This is the only API common to RDK / RPi / Jetson / Rockchip.
+3. **Use `Hobot.GPIO`** only when you need RPi-tutorial compatibility (its API copies `RPi.GPIO`). It is **system-Python only** — `import Hobot.GPIO` inside conda/venv fails; use `/usr/bin/python3`.
+4. **Real-time / <1ms jitter?** Call `libgpiod` from C, or on X5 use `x5-hobot-io` (C bindings, ~10× lower latency than Python `Hobot.GPIO`).
 
-## 参考资料
+Details and the cross-platform pin/bus mapping: [hardware-notes.md](references/hardware-notes.md).
 
-- [GPIO / 外设命令](references/gpio-commands.md)
-- [硬件与系统参考(详细章节)](references/hardware-notes.md)
-- [CAN 与板级 IO 实操(X5 SocketCAN / S100·S600 MCU 域 CAN / S100 拨码 / S600 自锁口)](references/rdk-can-and-board-io.md)
+### Workflow 2 — Servos and motors
+
+**Use when:** 舵机, 步进电机, 直流电机, 无刷, motor won't turn, robot joint.
+
+1. **Single servo (1–2 ch):** on-board hardware PWM. Signal = 50Hz (20ms period) + 1.0ms (0°) to 2.0ms (180°) pulse. Switch the pin to PWM mode first (`srpi-config` on X-series), then drive via `/sys/class/pwm/pwmchipN/`.
+2. **≥3 servos:** **PCA9685 + I2C** (addr `0x40`, 16ch, 12-bit). Servo power goes to PCA9685's **V+ screw terminal**, never the 40PIN rail.
+3. **DC motor:** H-bridge + PWM (speed) + GPIO (direction). TB6612FNG for a small 2-wheel car, BTS7960 for high current.
+4. **Stepper:** dedicated driver + STEP/DIR (2 GPIO, no PWM needed). TMC2209 if silence matters.
+5. **BLDC:** RC ESC (50Hz PWM like a servo) for open-loop; ODrive/VESC (UART/USB/CAN) for closed-loop. **Bus servos** (Feetech STS / Dynamixel) over USB-TTL are the standard for desktop arms / quadrupeds — one wire, many addressable servos.
+
+Full wiring tables, code, and the PCA9685 troubleshooting steps: [hardware-notes.md](references/hardware-notes.md) §Servos and §Motors.
+
+### Workflow 3 — Audio without TROS (ALSA)
+
+**Use when:** play/record audio and `hobot_audio` (TROS + official mic-array board) is not available.
+
+1. **Probe:** `aplay -l` / `arecord -l` list output/input cards. Nothing listed → kernel didn't see hardware → check `lsusb` and `dmesg | grep -i snd`.
+2. **Play:** `aplay test.wav`, or `aplay -D plughw:1,0 test.wav` for a specific card. MP3 needs `mpg123` / `sox` first.
+3. **Record:** `arecord -D plughw:1,0 -f S16_LE -r 16000 -c 1 -d 5 test.wav`.
+4. **Silent but a card exists?** `alsamixer` → unmute (M), raise volume. Busy/"unable to open slave" → another process holds it (`sudo fuser /dev/snd/*`).
+5. **Universal fallback:** plug in a **USB sound card** — `snd-usb-audio` auto-loads and `aplay -l` shows it immediately. This is the only recommended path on Jetson (no on-board audio) and on RDK without an I2S HAT.
+
+Command catalog and error table: [hardware-notes.md](references/hardware-notes.md) §Audio.
+
+### Workflow 4 — CAN bringup
+
+**Use when:** CAN, SocketCAN, cansend, candump, S100/S600 CAN.
+
+1. **Identify the board first** — this decides everything (`scripts/can_mode.py <board>` answers it deterministically):
+   - **X5** → Linux SocketCAN (TCAN4550 on SPI5). `ip link` + `can-utils`. Has a `can0` network device.
+   - **S100 / S600** → CAN controller is in the **MCU domain**. Use CANHAL library + IPC + the `/app/Can` sample. There is **no `can0`** — `ip link set canX` does not apply.
+   - **X3 / Ultra** → no on-board CAN.
+2. **X5 quick self-test (loopback):** `ip link set can0 type can bitrate 125000` → `loopback on` → `up` → `candump can0 -L &` → `cansend can0 123#1122334455667788`.
+3. **X5 CAN FD:** `ip link set can0 type can bitrate 500000 dbitrate 2000000 fd on`; send an FD frame with `##` (e.g. `cansend can0 123##3...`).
+4. **S100/S600:** start MCU1, build the `/app/Can` sample (`make`), edit the JSON config to the right IPC instance/channel for your CAN line, then `./canhal_get bypass &` / `./canhal_send bypass <ch>`. Terminate the bus with the right 120Ω element (X5 = switch, S100 = jumper, S600 = dip ON).
+
+Full per-board CAN bringup, IPC channel maps, S100 dip mux, and S600 self-locking IO: [rdk-can-and-board-io.md](references/rdk-can-and-board-io.md).
+
+### Workflow 5 — Zero-driver diagnosis (device not detected)
+
+**Use when:** "I plugged in X but the board doesn't recognize it / no driver". Don't guess — run the 9 steps. Universal across RDK / RPi / Jetson / Rockchip.
+
+```
+dmesg | tail -50  →  lsusb  →  ls /dev/ (tty*/video*/i2c-*/spidev*/snd/)
+→  i2cdetect -l && i2cdetect -y <bus>  →  v4l2-ctl --list-devices
+→  aplay -l / arecord -l  →  lsmod | grep <kw>  →  modinfo/modprobe <mod>
+→  cat /proc/device-tree/…
+```
+
+**Answer template:** ask for **board model + interface (USB / 40PIN I2C / UART / MIPI) + device model** → have the user run `dmesg`/`lsusb`/`ls /dev` and paste back → match the symptom table → give the smallest verifiable command → only then discuss ROS2-node wrapping / autostart.
+
+Symptom→diagnosis table and the three orthogonal fix paths: [hardware-notes.md](references/hardware-notes.md) §Zero-driver diagnosis.
+
+## Worked examples
+
+**Example 1 — "我在 S100 上敲 `ip link set can0 type can bitrate 500000` 不工作"**
+That's the X5 path. **S100's CAN is in the MCU domain — there is no `can0` network device.** Answer: *"S100/S600 don't expose SocketCAN. The CAN controller lives in the MCU domain; Acore reaches it through CAN2IPC → IPC → the CANHAL library. Use the `/app/Can` sample: start MCU1, `make` the sample, set the IPC instance/channel in its JSON config (e.g. S100 CAN6 = instance 0 / channel 6), then `./canhal_get bypass &` and `./canhal_send bypass 6`. `ip link`, `cansend`, `candump` only work on X5."* Point to [rdk-can-and-board-io.md](references/rdk-can-and-board-io.md) §2.
+
+**Example 2 — "想在 RDK X5 上接 4 个舵机，怎么接线?"**
+Don't drive 4 servos from on-board PWM or the 40PIN rail. Answer: *"Use a PCA9685 (I2C, default `0x40`, 16 channels). Wire SDA/SCL/VCC/GND to the board; put the **servo power on the PCA9685 V+ screw terminal** from an external 5V/5A supply, common GND. Confirm with `i2cdetect -y <bus>` that `0x40` shows up before coding. If servos jitter, it's almost always supply, not signal."* Point to Workflow 2.
+
+**Example 3 — "插了 USB 麦克风，想录音,没装 TROS"**
+No TROS needed — go straight to ALSA. Answer: *"`arecord -l` to find the card (e.g. card 1). Record with `arecord -D plughw:1,0 -f S16_LE -r 16000 -c 1 -d 5 test.wav`, play back with `aplay test.wav`. If nothing shows in `arecord -l`, check `lsusb` and `dmesg | grep -i snd` — a USB mic should auto-load `snd-usb-audio`."* Point to Workflow 3.
+
+**Example 4 — "我接了个 WS2812 灯带,GPIO 拉高拉低控制不了"**
+GPIO bitbang can't hold the WS2812 800kHz timing reliably. Answer: *"Drive WS2812 from the **SPI MOSI** pin, emulating the timing: run SPI at ~2.4MHz and encode each WS2812 bit as 4 SPI bits, via `Adafruit-CircuitPython-NeoPixel-SPI`. RPi's `rpi_ws281x` does NOT work on RDK. And 30 LEDs at full white ≈ 1.8A — power the strip from an external 5V supply with common GND, never the 40PIN rail."* Point to [hardware-notes.md](references/hardware-notes.md) §LEDs.
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+| --- | --- |
+| Power servos/motors/WS2812 from 40PIN Pin 2/4 | External 5V/6V supply, common GND |
+| Run `ip link set can0 ...` on S100/S600 | Use the MCU-domain CANHAL `/app/Can` sample (only X5 is SocketCAN) |
+| Guess BCM numbers in a cross-board script | Use `libgpiod` by line name (`gpiofind "GPIO17"`) |
+| Read I2C before confirming the address | `i2cdetect -y <bus>` first, then read/write |
+| Expect `/dev/i2c-X` / `pwmchip` to exist by default | Switch the 40PIN function first (X5 `srpi-config`; S100 dip switch) |
+| `import Hobot.GPIO` inside conda/venv | Use system `/usr/bin/python3` (bindings are system-only) |
+| Drive WS2812 via GPIO bitbang | SPI MOSI emulation at 2.4MHz (`NeoPixel-SPI`) |
+| Assume S600 has a 40PIN | S600 uses 1.8V self-locking connectors (§4) |
+
+## Reference map
+
+| Read this | When |
+| --- | --- |
+| [gpio-commands.md](references/gpio-commands.md) | Quick command/risk table for I2C / SPI / GPIO / pinmux probing |
+| [hardware-notes.md](references/hardware-notes.md) | Deep dives: cross-platform 40PIN pin/bus mapping, libgpiod, servos & PCA9685, motor paradigms, LEDs/WS2812, ALSA audio, zero-driver diagnosis SOP |
+| [rdk-can-and-board-io.md](references/rdk-can-and-board-io.md) | CAN bringup (X5 SocketCAN / S100·S600 MCU-domain CANHAL), S100 I2C5↔UART2 dip mux, S600 self-locking IO (GPIO/UART6-7/SPI1) |
+| `scripts/can_mode.py <board>` | Deterministic "is this board SocketCAN or MCU-domain CAN?" lookup (X5/S100/S100P/S600/X3/Ultra) |

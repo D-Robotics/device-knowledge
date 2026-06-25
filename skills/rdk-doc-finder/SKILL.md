@@ -1,65 +1,122 @@
 ---
 name: rdk-doc-finder
-description: 当开发者问"X 在官方文档哪里 / 哪本手册讲 Y / 哪一章 / 去哪查 Z / 给个权威出处链接"时使用,把任意 RDK 问题精准指到官方文档站的章节 + URL。本 skill 是"官方文档站/手册导航"(developer.d-robotics.cc 的 rdk_x_doc / rdk_s_doc / tros_doc / model_zoo_doc / rdk_studio_doc / accessories_doc 六个站)。与兄弟 skill 划清:定位 GitHub 仓库/源码走 rdk-source-map;买哪块板/能不能跑/选型口径走 rdk-ecosystem;报错诊断走 rdk-board-knowledge;硬件引脚事实走 rdk-hardware。本 skill 只回答"该去哪个手册的哪一章看",不替代上述内容性 skill。
+description: Pinpoints WHERE in the official D-Robotics documentation a given RDK topic lives, then derives the exact developer.d-robotics.cc URL and verifies it. Use whenever the user asks "where in the docs is X / which manual covers Y / which chapter / where do I look up Z / give me the authoritative link". This is the official doc-SITE navigator — it routes across the six split Docusaurus sites (rdk_x_doc / rdk_s_doc / tros_doc / model_zoo_doc / rdk_studio_doc / accessories_doc) and the archived rdk_doc. 触发词:官方文档在哪、哪本手册、哪一章、去哪查、文档链接、权威出处、developer.d-robotics.cc、文档站、用户手册、Quick Start 在哪、FAQ 在哪、给个官方链接、这个在哪讲。Routing — locating a GitHub repo / source code → rdk-source-map; which board to buy / can it run X / spec comparison → rdk-ecosystem; error-code diagnosis → rdk-board-knowledge; hardware pin/electrical facts → rdk-hardware. This skill answers only "which manual, which chapter, what URL" — it does not replace those content skills.
 ---
 
-# RDK 官方文档定位器
+# RDK Official Doc Locator
 
-> 来源:实地核对 D-Robotics 六个 Docusaurus 文档仓(rdk_x_doc / rdk_s_doc / tros_doc / model_zoo_doc / rdk_studio_doc / accessories_doc,默认分支均 `main`)的目录树与 `docusaurus.config.js`,并对代表性 URL 在 developer.d-robotics.cc 实测 200/404 验证;逐条保留出处。文档随版本演进,以站点实际页面为准。
+Point any RDK question at the right official manual, chapter, and verified `developer.d-robotics.cc` URL. The single most important thing: **the docs are split across SIX live sites plus one archive — pick the right site first, then derive the URL, then verify it before handing it over.** Never paste a derived URL you have not confirmed `200`.
 
-回答"这个问题官方文档在哪讲 / 该看哪本手册哪一章 / 给我权威链接"。**完整主题→URL 速查表见 [doc-map](references/doc-map.md)**,本页只讲选站规则与 URL 推导法。
+> Sources: the six D-Robotics Docusaurus repos (`rdk_x_doc`, `rdk_s_doc`, `tros_doc`, `model_zoo_doc`, `rdk_studio_doc`, `accessories_doc`, default branch `main`) plus the archived `rdk_doc`. URL rules were checked against each repo's `docusaurus.config.js`; representative URLs were curl-tested 200/404 (see "Verified anchors"). Docs evolve with releases — when in doubt, re-fetch.
 
-## 第一步:按板型/主题选对站(六站分工)
+## Step 1 — Pick the right site (six-site split)
 
-| 站(baseUrl) | 管什么 | 覆盖板 |
-| --- | --- | --- |
-| **rdk_x_doc** | X 系列主手册:上手/系统配置/40pin/视觉/音频/多媒体/工具链/Linux 开发/FAQ/附录命令 | X3 · X3 Module · X5 · X5 Module · Ultra |
-| **rdk_s_doc** | S 系列主手册:同上 + **MCU 开发 / hbmem / PCIe / OTA / VDSP**(S 独有) | S100 · S100P · S600 |
-| **tros_doc** | **TROS/ROS2 机器人开发**:安装/quick demo/功能包(boxs)/应用(apps)/性能调优 | 跨板(X/S 通用) |
-| **model_zoo_doc** | **Model Zoo 算法清单与使用说明**(预编译模型、infer API、各板 guide) | X3 · X5 · S100 · S600 |
-| **rdk_studio_doc** | **RDK Studio 桌面客户端**:安装登录/烧录/连设备/AI 对话/OpenClaw/Skill/CLI/FAQ | Studio 软件本身 |
-| **accessories_doc** | **官方配件**:双目相机 GS130W/GS130WI、IMU 模组 | 配件硬件 |
+Each topic belongs to exactly one site. Get this wrong and every URL after it is wrong.
 
-选站心法:
-- 问"**怎么用某 ROS2 节点 / TROS 怎么装 / Nav2 / SLAM**"→ **tros_doc**(即使是 X/S 板)。
-- 问"**有没有现成的 YOLO/分类/分割模型、精度多少**"→ **model_zoo_doc**。
-- 问"**RDK Studio 客户端怎么操作 / OpenClaw / 烧录界面 / 客户端报错**"→ **rdk_studio_doc**。
-- 问"**S100 的 MCU / R52 / hbmem / .hbm / PCIe / EtherCAT**"→ **rdk_s_doc**(X 站没有 MCU 章节)。
-- 其余板上系统/外设/工具链类问题:X 板 → **rdk_x_doc**,S 板 → **rdk_s_doc**。
-- 板型不明时先问一句"你是哪块板(X3/X5/Ultra/S100/S600)",别默认塞 X5。
+| Site (`baseUrl`) | Owns | Boards |
+|---|---|---|
+| **rdk_x_doc** | X-series main manual: quick start / system config / 40pin / vision / audio / multimedia / toolchain / Linux dev / FAQ / appendix commands | X3 · X3 Module · X5 · X5 Module · Ultra* |
+| **rdk_s_doc** | S-series main manual: all of the above **plus MCU dev / hbmem / PCIe / OTA / VDSP** (S-only) | S100 · S100P · S600 |
+| **tros_doc** | **TROS / ROS2 robotics**: install / quick demo / function packages (boxs) / apps / perf tuning | cross-board (X & S) |
+| **model_zoo_doc** | **Model Zoo** algorithm catalog + usage (precompiled models, infer API, per-board guides) | X3 · X5 · S100 · S600 |
+| **rdk_studio_doc** | **RDK Studio desktop client**: install/login / flashing / connect device / AI chat / OpenClaw / Skill / CLI / FAQ | Studio app itself |
+| **accessories_doc** | **Official accessories**: stereo cameras GS130W / GS130WI, IMU module | accessory hardware |
 
-## 第二步:URL 推导规则(实测验证)
+\* Ultra has **no page in rdk_x_doc** — its hardware intro lives only in the archived `rdk_doc` (see Step 3).
 
-六站都是 Docusaurus,`url: https://developer.d-robotics.cc`,`baseUrl: /<repo>/`,`routeBasePath: /`。由 GitHub 源文件路径反推站点 URL:
+Site-selection cheat-sheet:
 
-> **规则(基线,但有例外)**:取仓内 `docs/<path>.md`,大体上**逐段去掉开头的 `NN_` / `NN-` 数字序号前缀**,去掉 `.md`,大小写原样保留,拼到 `https://developer.d-robotics.cc/<repo>/<路径>`。
+| User asks about… | Go to |
+|---|---|
+| Using a ROS2 node, installing TROS, Nav2, SLAM, stereo/VIO | **tros_doc** (even on X/S boards) |
+| Ready-made YOLO/classification/segmentation model, accuracy figures | **model_zoo_doc** |
+| RDK Studio client UI, OpenClaw, flashing dialog, client errors | **rdk_studio_doc** |
+| S100/S600 MCU / R52 / hbmem / .hbm / PCIe / EtherCAT / OTA / VDSP | **rdk_s_doc** (X site has no MCU chapter) |
+| Other on-board system / peripheral / toolchain topics | X board → **rdk_x_doc**, S board → **rdk_s_doc** |
+| Stereo camera GS130W/GS130WI, IMU module | **accessories_doc** |
 
-实测样例:
-- `tros_doc` 的 `docs/03_boxs/detection/yolo.md` → `.../tros_doc/boxs/detection/yolo`(剥前缀,200)
-- `rdk_s_doc` 的 `docs/07_Advanced_development/05_mcu_development/08_mcu_ipc.md` → `.../rdk_s_doc/Advanced_development/mcu_development/mcu_ipc`(剥前缀,200)
-- `rdk_x_doc` 的 `docs/04_vision/.../overview.md` → `.../Basic_Application/vision/overview`(剥前缀,200)
+If the board is unknown, **ask "which board (X3/X5/Ultra/S100/S600)?" first** — do not default to X5.
 
-> ⚠️ **前缀剥离不是全站统一规则,分 section 不一致**(实测):`01_40pin_user_sample/` 这层**保留 `01_` 前缀**——GPIO 正确 URL 是 `.../Basic_Application/01_40pin_user_sample/gpio`(200),去掉 `01_` 的 `.../40pin_user_sample/gpio` 反而 **404**。所以**给出推导 URL 前务必 `web_fetch` 实测 200**,尤其 40pin/install_os 这类带嵌套数字目录的 section。
+## Step 2 — Derive the URL, then verify
 
-**例外,推导前先查源文件 frontmatter / 实测**:
-0. **某些叶子目录保留数字前缀**(如 `01_40pin_user_sample`),不能盲剥——见上方 ⚠️。
-1. 文件头有 `slug:` 时以 slug 为准(可保留数字前缀、甚至改名)。已知 `rdk_s_doc` 的 S100/S600 **硬件介绍**页用自定义 slug,如开发者套件页实测是
-   `https://developer.d-robotics.cc/rdk_s_doc/01_Quick_start/01_hardware_introduction/01_rdk_s100/01_rdk_s100_kit`(保留了序号)。
-2. 拿不准时给 **GitHub 源路径 + 站点根**,不要臆造 URL。查源文件:
+All six sites are Docusaurus with `url: https://developer.d-robotics.cc`, `baseUrl: /<repo>/`, `routeBasePath: /`. From a GitHub source path you derive the site URL:
+
+> **Baseline rule:** take the repo file `docs/<path>.md`, **strip the leading `NN_` / `NN-` numeric ordering prefix from each path segment**, drop `.md`, keep the case as-is, and join onto `https://developer.d-robotics.cc/<repo>/<path>`.
+
+Verified examples:
+- `tros_doc` `docs/03_boxs/detection/yolo.md` → `…/tros_doc/boxs/detection/yolo` (200)
+- `rdk_s_doc` `docs/07_Advanced_development/05_mcu_development/08_mcu_ipc.md` → `…/rdk_s_doc/Advanced_development/mcu_development/mcu_ipc` (200)
+- `rdk_studio_doc` `docs/3-user-guide/10-openclaw/1-overview.md` → `…/rdk_studio_doc/user-guide/openclaw/overview` (200)
+
+> ⚠️ **Prefix-stripping is NOT global — some leaf directories keep their number.** The `01_40pin_user_sample/` segment is kept: GPIO is `…/Basic_Application/01_40pin_user_sample/gpio` (200); stripping the `01_` to `…/Basic_Application/40pin_user_sample/gpio` returns **404**. So **always `curl`/`web_fetch` a derived URL before handing it out**, especially for `40pin_user_sample` and nested numbered sections.
+
+**Exceptions — check the source frontmatter before deriving:**
+1. **Custom `slug:` overrides the path.** A file with `slug:` in its frontmatter keeps whatever that slug says — often including the numeric prefixes. The S100/S600 hardware-intro pages do this: the S600 dev-kit page is `…/rdk_s_doc/01_Quick_start/01_hardware_introduction/02_rdk_s600/01_rdk_s600_kit` (200, slug keeps every `NN_`).
+2. **When unsure, give the GitHub source path + the site root** rather than inventing a URL. Inspect frontmatter:
    ```bash
    gh api "repos/D-Robotics/<repo>/contents/<docs/path.md>?ref=main" --jq '.content' | base64 -d | head -8
    ```
 
-## 第三步:旧链接迁移提醒(必读)
+## Step 3 — Old `rdk_doc` migration (read this)
 
-- 旧的合并仓 **`rdk_doc`**(`developer.d-robotics.cc/rdk_doc/...`,含 `docs/`=X、`docs_s/`=S)页面仍可访问,但顶部已挂"**本手册已迁移至全新资料中心**"(实测注明 2026-06-10 起)。
-- **新出处一律用拆分后的 `rdk_x_doc` / `rdk_s_doc` / `tros_doc` 等**;只有当新站确无对应页时才回退旧 `rdk_doc` 链接,并提示用户它是归档版。
-- `rdk_x_doc` 与 `rdk_s_doc` 是 `rdk_doc` 的 X/S 拆分迁移目标;`tros_doc`(机器人开发)是从原 `rdk_doc` 第 5 章独立出来的 TROS 专站。
+- The old merged repo **`rdk_doc`** (`developer.d-robotics.cc/rdk_doc/…`, with `docs/`=X and a second instance routed at `rdk_s`) is **still live** but carries a "this manual has migrated to the new doc center" banner.
+- **Always prefer the split `rdk_x_doc` / `rdk_s_doc` / `tros_doc` etc.** Fall back to `rdk_doc` only when the new sites genuinely lack the page, and tell the user it is the archived version.
+- `rdk_x_doc` and `rdk_s_doc` are the X/S split-out targets of `rdk_doc`; `tros_doc` was split out of old `rdk_doc` chapter 5 (Robot development).
+- **Known archive-only page: RDK Ultra hardware intro** — `…/rdk_doc/Quick_start/hardware_introduction/rdk_ultra` (200). There is no `rdk_ultra` page under `rdk_x_doc`.
 
-## 第四步:查不到就核对,别编
+## Step 4 — Can't find it? Verify, don't invent
 
-- 不确定某页是否存在/URL 是否正确时,用 `web_fetch` 实测该 URL,或先列源仓子树定位文件:
+- Unsure a page exists or a URL is right → `web_fetch`/`curl` the URL, or list the repo tree to locate the file first:
   ```bash
-  gh api "repos/D-Robotics/<repo>/git/trees/main?recursive=1" --jq '.tree[].path' | grep -iE '关键词'
+  gh api "repos/D-Robotics/<repo>/git/trees/main?recursive=1" --jq '.tree[].path' | grep -iE '<keyword>'
   ```
-- **完整分类索引(快速上手/系统配置/40pin/视觉/音频/多媒体/算法 ModelZoo/机器人 TROS/工具链/Linux 与 MCU 高级开发/FAQ/附录命令手册/发布说明/RDK Studio/配件)见 [doc-map](references/doc-map.md)**,每条标了覆盖哪些板与归属哪个站。
+- The **full topic → location index** (quick start / system config / 40pin / vision / audio / multimedia / Model Zoo / TROS / toolchain / Linux & MCU advanced dev / FAQ / appendix command manual / release notes / RDK Studio / accessories) is in **[doc-map.md](references/doc-map.md)** — each row tags which boards it covers and which site it lives on.
+
+## Worked examples
+
+**Example 1 — "YOLO 目标检测在官方文档哪里讲?给个链接"**
+This is a ROS2 function package → **tros_doc**, not the X/S board manual. Answer: `https://developer.d-robotics.cc/tros_doc/boxs/detection/yolo` (verified 200). If they instead want a *precompiled* YOLO model to download, that is model_zoo_doc — ask which they mean.
+
+**Example 2 — "S100 的 MCU IPC 文档在哪?"**
+MCU is S-only → **rdk_s_doc**, Advanced development. Source `docs/07_Advanced_development/05_mcu_development/08_mcu_ipc.md`, strip prefixes → `https://developer.d-robotics.cc/rdk_s_doc/Advanced_development/mcu_development/mcu_ipc` (verified 200). Note the X site has no MCU chapter at all.
+
+**Example 3 — "RDK Ultra 的硬件介绍官方在哪看?"**
+Trap: there is **no Ultra page in rdk_x_doc** (only rdk_x3 / rdk_x5). The Ultra hardware intro is archive-only: `https://developer.d-robotics.cc/rdk_doc/Quick_start/hardware_introduction/rdk_ultra` (200). Tell the user it is on the legacy site pending migration.
+
+**Example 4 — "RDK Studio 里 OpenClaw 怎么用,有没有官方文档?"**
+The desktop client → **rdk_studio_doc** (uses hyphenated `NN-` prefixes). Source `docs/3-user-guide/10-openclaw/1-overview.md` → `https://developer.d-robotics.cc/rdk_studio_doc/user-guide/openclaw/overview` (verified 200).
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+|---|---|
+| Hand out a derived URL without checking it | `curl`/`web_fetch` it 200 first — `40pin` and nested numbered sections fail the naive rule |
+| Strip the number from `01_40pin_user_sample/` | Keep it — stripped → 404, kept → 200 |
+| Send TROS/Nav2/SLAM questions to the board manual | Route all ROS2 topics to **tros_doc** |
+| Invent an `rdk_ultra` page under rdk_x_doc | Use the archived `rdk_doc/…/rdk_ultra`; rdk_x_doc only has x3/x5 |
+| Default to X5 when the board is unstated | Ask which board first |
+| Prefer old `rdk_doc` links | Use the split sites; fall back to `rdk_doc` only when no new page exists, and flag it as archived |
+| Assume a custom-slug page follows the strip rule | Read the frontmatter `slug:` (S100/S600 hardware intros keep numeric prefixes) |
+
+## Verified anchors (200, re-checkable)
+
+Stable URLs confirmed live, useful as derivation reference points:
+
+| URL | Site |
+|---|---|
+| `…/rdk_x_doc/Quick_start/hardware_introduction/rdk_x5` | rdk_x_doc |
+| `…/rdk_x_doc/Basic_Application/01_40pin_user_sample/gpio` | rdk_x_doc (prefix kept) |
+| `…/rdk_s_doc/01_Quick_start/01_hardware_introduction/01_rdk_s100/01_rdk_s100_kit` | rdk_s_doc (custom slug) |
+| `…/rdk_s_doc/Advanced_development/mcu_development/mcu_ipc` | rdk_s_doc |
+| `…/tros_doc/boxs/detection/yolo` | tros_doc |
+| `…/model_zoo_doc/rdk_x5_guide` | model_zoo_doc |
+| `…/rdk_studio_doc/user-guide/openclaw/overview` | rdk_studio_doc |
+| `…/accessories_doc/stereo_camera_gs130w/product_overview` | accessories_doc |
+| `…/rdk_doc/Quick_start/hardware_introduction/rdk_ultra` | rdk_doc (archive-only) |
+
+## Reference map
+
+| Read this | When |
+|---|---|
+| [doc-map.md](references/doc-map.md) | You need the full topic → site/URL index across all six sites + archive — every chapter row, with board coverage and verification status |
+| `scripts/derive_doc_url.py` | Deterministically derive a candidate URL from a `repo` + `docs/...md` path (applies the strip rule, flags the `40pin`/slug exceptions to verify) |

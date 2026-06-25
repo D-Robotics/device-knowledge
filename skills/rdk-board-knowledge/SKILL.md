@@ -1,124 +1,142 @@
 ---
 name: rdk-board-knowledge
-description: 当需要确认 RDK 板型运行基线、排查常见报错(摄像头/模型/TROS/GPIO/APT 等)、或纠正用户高频误区时使用;附完整故障速查与诊断命令库。本 skill 是报错诊断入口:纯硬件事实/引脚定义走 rdk-hardware,部署闭环走 rdk-device,外设驱动走 rdk-peripheral-cookbook。
+description: Identify which RDK board you're on, confirm its runtime baseline (SoC/BPU/OS/TROS), diagnose the common on-board errors (camera, model/BPU, TROS/ROS2, APT/pubkey, GPIO/I2C/serial, power, network), correct the high-frequency user misconceptions, and flash the S-series (S100/S100P/S600) via xburn DFU/Fastboot. Use this WHENEVER a user pastes an error/log, asks "which board is this / 是哪块板", reports something broken on the board, asks an official-FAQ-style question, or needs to flash an S-series image — don't wait for them to name the exact subsystem. 触发词:报错、排查、诊断、卡死、连不上、识别板型、确认板子、是哪块板、板型基线、系统版本、摄像头没画面、模型跑不了、ros2 command not found、NO_PUBKEY、GPIO 权限、供电不足、under-voltage、xburn、烧录、刷机、进下载模式、DFU、Fastboot、变砖、S100/S600 烧录、官方 FAQ、默认账户密码。Routing — pure pin/connector/spec facts → rdk-hardware; full self-trained model deployment loop (hb_mapper/hb_compile) → rdk-device; peripheral driver cookbooks → rdk-peripheral-cookbook; product selection/comparison → rdk-ecosystem; exact latest doc URL → rdk-doc-finder.
 ---
 
-# RDK 板型基线与故障诊断
+# RDK Board Baseline & Failure Diagnosis
 
-> 来源:整理自 D-Robotics RDK 官方文档、工具链与社区实践,逐条保留出处链接;由 device-knowledge 知识库忠实转换而来,未改写技术事实。
+Before answering any RDK problem, **confirm the board from on-board facts, not from the user's words.** The board determines every downstream answer — package names, TROS path, toolchain, camera node, default IP. Guessing the board (e.g. assuming X5) is the single most common way these answers go wrong.
 
-## 何时用
+> Sources: official D-Robotics docs `rdk_doc` / `rdk_x_doc` / `rdk_s_doc` (08_FAQ + 01_Quick_start/install_os), the OpenExplorer / 天工开物 (TianGong) toolchains, and reproduced community cases. Facts are carried over with provenance; nothing is invented.
 
-确认 RDK 板型与运行基线(是哪块板 / 系统版本)、排查板上常见报错(摄像头、模型/BPU、TROS·ROS2、APT·公钥、GPIO·I2C·串口、供电、网络等)、或纠正用户高频误区(跨板兼容、工具链位置、Studio≠板子等)时使用。模型部署闭环走 rdk-device,外设驱动食谱走 rdk-peripheral-cookbook,产品选型走 rdk-ecosystem。
+## The one move that matters most
 
-先用板上事实确认基线,再按"现象→建议→文档"排障;遇到误区先一句澄清再继续。
+**Run a read-only identity probe first.** Never flash, upgrade, or drive GPIO before you know the board:
 
-**遇到以下用户误区时，先用一句话澄清再继续**（不要顺着错误前提走）：
-- "X3 的 .bin 拷 X5 能跑" → ❌ 不能，BPU 架构不同（Bernoulli2 vs Bayes），必须用对应工具链重编；X5 与 Ultra 同 Bayes 架构（march 同 `bayes-e`），`.bin` 原则上可互跑，但 Ultra 算力/内存更高，跨板务必各自做性能/精度验证。S100/S100P 是 Nash 架构、产物 `.hbm`，与 X 系列互不通用。
-- "`hb_mapper` 在板上 apt install" → ❌ 工具链在**主机 Docker**里用，板上只装 runtime；用户找不到就是正常的。
-- "RDK Studio = 板子" → ❌ RDK Studio 是**桌面 IDE**（你就在里面）；板子是 RDK X3/X5/S100 等硬件，靠 SSH/Studio 协作。
-- "RDK 是地平线的" → 现品牌是 D-Robotics；旧资料里的 "Horizon/地平线" 指同一条产品线，口径统一回 D-Robotics。
-- "Ultra 是 X5 超频版" → ❌ 同 Bayes 架构但算力 ×9.6（96 TOPS）、8GB RAM、需主动散热，定位工业/科研，不是"加强 X5"。
-- "hobot_dnn 放 venv/conda 里" → ❌ 只认系统 Python（`/usr/bin/python3`），虚拟环境导入必失败。
-- "RDK OS 1.x apt 升到 3.x" → ❌ 跨主版本**必须重刷镜像**；同主版本（如 3.0→3.4）也必须按官方流程评估升级，Studio 不自动跑整机 `apt upgrade`。
-- "NodeHub = Model Zoo" → 两个不同仓库：NodeHub 是 ROS2 节点级应用，Model Zoo（`rdk_model_zoo` / `rdk_model_zoo_s`）是模型 + 推理样例。
-- "S100 国产 Jetson" → 定位接近，但走 BPU + ONNX 工具链，**不是** CUDA；Jetson 代码不能直接迁移，必须走模型转换。
-- **纠正原则**：先一句澄清 → 再问用户"你实际想达成什么"（可能底层需求与板型选择都要改），不要只纠正术语就完事。
+```bash
+cat /sys/class/socinfo/board_id     # X5 / S-series read this (srpi-config, hobot_mipi_cam use it)
+cat /sys/class/socinfo/som_name     # X3 docs use som_name; pick one per board
+cat /proc/device-tree/model         # literal model string; fallback /etc/board_config.json
+cat /etc/version                     # OS/RDK image version (2.1.0+ also has `rdkos_info`)
+```
 
-## 工作流:确认 RDK 板型与运行基线
+If the output doesn't map cleanly to X3/X5/Ultra/S100/S100P/S600, **ask for more logs — do not assume X5.**
 
-**触发场景**:确认板型 / identify board / board profile / 连接新设备 / 不知道是哪块 RDK
+## Board baseline cheat-sheet
 
-**前置条件**:
-- 已经通过 SSH、串口或 RDK Studio 打开设备 shell。
+| Board | BPU arch | OS / TROS | Default IP (wired) | Power | Flash method |
+|-------|----------|-----------|--------------------|-------|--------------|
+| RDK X3 | Bernoulli2 (`bernoulli2`) | Ubuntu 20.04/22.04, Humble (`/opt/tros/humble`) | 2.1.0+ `192.168.127.10` (≤2.0.0 `192.168.1.10`) | Type-C 5V/3A+ | SD card (balenaEtcher / official flasher) |
+| RDK X5 | Bayes-e (`bayes-e`) | Ubuntu 22.04, Humble | wired `192.168.127.10`, USB-net `192.168.128.10` | 5V/5A | SD card |
+| RDK Ultra | Bayes (`bayes`) | Ubuntu 20.04, Foxy/Humble | DHCP | 12V/5A DC | SD card |
+| RDK S100 | Nash-e (`nash-e`) | Ubuntu 22.04, Humble (`tros-humble`) | **eth1 fixed `192.168.127.10`**, eth0 DHCP | 12–20V (typ. 12V/5.5A ~70W) | **xburn** (media `emmc`) |
+| RDK S100P | Nash-m (`nash-m`) | Ubuntu 22.04, Humble | eth1 fixed `192.168.127.10` | 12–20V | **xburn** (media `emmc`) |
+| RDK S600 | Nash (`nash-p`) | **Ubuntu 24.04, Jazzy (`/opt/tros/jazzy`, `tros-jazzy`)** | eth1 fixed `192.168.127.10` | **12–28V** (adapter 24V/8A) | **xburn** (media `ufs`) |
 
-**步骤**:
+> BPU march is the `hb_compile --march` / `hb_mapper` arch flag. **`bayes` (Ultra) ≠ `bayes-e` (X5)** and **`nash-e`/`nash-m`/`nash-p` (S100/S100P/S600)** are all distinct — artifacts never interchange across marches. Board runtime: X3/Ultra `hobot_dnn`; X5 `hbm_runtime` (RDK OS 3.5.0+) or `pyeasy_dnn`; S-series `hbm_runtime`.
 
-1. **读取板型标识** `[safe]`
-   先用板上事实确认硬件，不要根据用户描述猜测 X3/X5/Ultra/S100/S600。
-   ```bash
-   cat /sys/class/socinfo/board_id      # X5/S 系列(srpi-config、hobot_mipi_cam 都读它)
-   cat /sys/class/socinfo/som_name      # X3 文档用 som_name;两者按板型择一
-   cat /proc/device-tree/model          # 板型字面;再不行查 /etc/board_config.json
-   ```
-   预期:输出能映射到 X3、X5、Ultra、S100、S100P 或 S600；未知输出需要继续收集日志。
+**Default login on every RDK image: both `sunrise/sunrise` (normal) AND `root/root` (super).** Desktop autologin uses `sunrise`; RDK Studio's SSH channel often uses `root`. (FAQ "默认登录账户" Q.)
 
-2. **读取系统镜像版本** `[safe]`
-   记录 OS/RDK 版本，后续包名、TROS 路径和工具链建议都要以版本为前提。
-   ```bash
-   cat /etc/version
-   ```
-   预期:输出镜像版本；如果文件不存在，改用系统 release 文件和 RDK Studio 设备信息交叉确认。
+X-series produce `.bin`; S-series produce `.hbm`. Cross-architecture artifacts are **never** interchangeable. Toolchain (`hb_mapper` for X, `hb_compile` for S) runs on an **x86 Docker host**, never on the board.
 
-3. **按板型选择 BPU 监控命令** `[safe]`
-   X3 使用 hrut_smi；X5/Ultra 使用 hrut_bpuprofile -b 0；S100/S100P/S600 使用 hrut_bpuprofile；通用兜底 `cat /sys/devices/system/bpu/bpu0/ratio`。
-   ```bash
-   hrut_bpuprofile -b 0
-   ```
-   预期:X5/Ultra 能看到 BPU profile 输出；X3 或 S100 系列需要换对应命令。
+## Correct the misconception first
 
-**验证**:
-- 回答中先列出已确认基线:面向用户的下一步建议必须先说明板型、SoC/BPU 架构、系统版本和仍未知的信息。
-- 未知板型不套模板:无法确认时追问或请求命令输出，不默认套用 RDK X5 路径。
+When a user opens with a wrong premise, **clarify in one line before continuing** — don't answer the wrong question. Then ask what they actually want to achieve.
 
-**安全注意**:
-- 本流程只使用只读命令；不要在确认板型前执行刷机、升级或 GPIO 输出类操作。
+| User says | One-line correction |
+|-----------|---------------------|
+| "My X3 `.bin` will run on X5" | No — different BPU arch (X3 Bernoulli2 vs X5 Bayes-e), recompile with the matching toolchain. X5 (`bayes-e`) and Ultra (`bayes`) are **different marches and NOT interchangeable** despite the shared "Bayes" family name — recompile per board. S-series `.hbm` never interchanges with X. |
+| "`apt install hb_mapper` on the board" | No — the toolchain lives in **host Docker**; the board only has the runtime. Not finding it on the board is expected. |
+| "RDK Studio = the board" | RDK Studio is a **desktop IDE** (you are inside it); the board is the X3/X5/S100… hardware, reached over SSH/Studio. |
+| "RDK is Horizon's" | The current brand is **D-Robotics**; legacy "Horizon / 地平线" refers to the same product line — normalize to D-Robotics. |
+| "Ultra is an overclocked X5" | Same Bayes arch but ~9.6× compute (96 TOPS), 8 GB RAM, active cooling; an industrial/research board, not a "stronger X5". |
+| "Put hobot_dnn in a venv/conda" | Bindings target **system Python** (`/usr/bin/python3`) only; venv/conda import will fail. |
+| "`apt upgrade` RDK OS 1.x → 3.x" | Cross-major-version upgrade **requires reflashing**; even same-major must follow the official upgrade flow. Studio never auto-runs a full `apt upgrade`. |
+| "NodeHub = Model Zoo" | Two repos: NodeHub = ROS2 node-level apps; Model Zoo (`rdk_model_zoo` / `rdk_model_zoo_s`) = models + inference samples. |
+| "S100 is a domestic Jetson" | Positioning is close, but it runs **BPU + ONNX toolchain, not CUDA**; Jetson code can't port directly — you must reconvert the model. |
+| "S600 has a 40PIN like a Pi" | **No** — S600 has no standard 40PIN; its CAN/UART/PCM use 1.8V self-locking connectors. (S100/S100P **do** have a 40-Pin GPIO header.) |
 
-**预期结果**:助手能把后续安装、模型部署、摄像头、TROS 建议限定到正确板型。
+## Failure quick-routing: symptom → entry point
 
-来源:<https://developer.d-robotics.cc/rdk_doc/Quick_start/hardware_introduction/rdk_x3> <https://developer.d-robotics.cc/rdk_doc/Quick_start/hardware_introduction/rdk_ultra> <https://developer.d-robotics.cc/rdk_doc/rdk_s/Quick_start/hardware_introduction/rdk_s100>
+Match the error keyword, then go to [failure-hints.md](references/failure-hints.md) for the exact command + doc.
 
-## 工作流:S 系列 xburn 烧录(进下载模式 + Xburn 写镜像)
+- **Camera** (`SIGABRT` / `exit code -6` / `No image data` / `VIDIOC_*` / `timeout`): a USB camera is 99% YUYV → switch to MJPEG, start at 640×480; `v4l2-ctl -d /dev/video0 --list-formats-ext` to read real modes (width/height/fps must match a listed entry exactly). RDK USB-cam default node is **`/dev/video8`**, not video0.
+- **Model / BPU** (`No such file *.bin/.hbm` / `OOM` / `model incompatible` / `unsupported op`): locate the model with `find /opt/tros -name "*.bin" -o -name "*.hbm"`, never a relative path. OOM → `cat /sys/devices/system/bpu/bpu0/ratio && free -h`. Cross-arch artifacts don't interchange; recompile with the matching toolchain.
+- **TROS / ROS2** (`ros2: command not found` / `tros package not found` / `NO_PUBKEY` / `setup.bash No such file`): X3/X5/Ultra/S100/S100P → `source /opt/tros/humble/setup.bash`; **S600 → `source /opt/tros/jazzy/setup.bash`** (Ubuntu 24.04, packages `tros-jazzy-*`). On `NO_PUBKEY`, re-import the keyring per the official TROS install doc.
+- **GPIO / I2C / serial / PWM** (`Permission denied` / `gpiochip not found` / `/dev/i2c` / `ttyUSB`): missing bus usually means the pin isn't pin-muxed yet; chip numbers differ per board — don't copy Raspberry Pi's, use `gpiofind`. Serial: add the user to `dialout`, then re-login.
+- **CAN** (`can0 not found` / `ip link ... can0` fails / `SocketCAN` examples don't work): **only X5 exposes CAN as SocketCAN** (`can0`, `cansend`/`candump`). **S100/S100P/S600 route CAN through the MCU domain (CANHAL), not SocketCAN** — there is no `can0` netdev; use the MCU-domain CAN connectors/HAL per the S-series MCU docs, not `ip link`.
+- **Power / hang** (`under-voltage` / `throttled` / `kernel panic` / `System halted`): check power first (X3 5V/3A+, X5 5V/5A, S100 12–20V, S600 12–28V), then temperature (`hrut_somstatus`, throttle >85 °C). Use the official supply; avoid USB-A→USB-C adapters.
+- **Network / SSH** (`Connection refused` / `timeout` / `Host key verification failed`): `ip addr` + `ping`; after reflashing run `ssh-keygen -R <ip>`. Can't reach a fresh S100/S600 → connect to the fixed **eth1 `192.168.127.10`** (set your PC to the same subnet).
+- **Device unrecognized** (`No such device` / `ENODEV`): run the generic probe `dmesg | tail -50 && lsusb && ls /dev/tty* /dev/video* /dev/i2c-* /dev/snd/`, then narrow down.
 
-**触发场景**:S100/S100P/S600 烧录系统 / xburn / 进下载模式 / DFU / Fastboot / 变砖刷机 / 空板烧录(X3/X5/Ultra 用 SD 卡 + balenaEtcher/官方烧录器,**不走 xburn**)。
+## Diagnostic command safety tiers
 
-**主机端准备**:
-- **Linux**:`sudo apt install android-tools-adb android-tools-fastboot dfu-util`。
-- **Windows**:装 `sunrise5_winusb` 驱动(archive.d-robotics.cc/downloads/software_tools/winusb_drivers/,管理员跑 `install_driver.bat`)+ CH340 串口驱动;串口 **921600/8/None/1/无流控**。Type-C 数据线连板子 Type-C 口。
+Classify before running ([full library](references/diagnostic-commands.md)):
 
-**进 DFU 下载模式(按板型)**:
-- **S100/S100P**:① SW1 拨 ↑ 关电 → ② SW2 拨 ↑ 进 Download → ③ SW1 拨 ▽ 开电 → ④ `DOWNLOAD` 灯亮(不亮按 `K1` 复位);另需 **SW3 拨『从板载 eMMC 启动』**(不支持从 M.2 NVMe 启动)。
-- **S600 V0P1**:PWR KEY `OFF` 关电 → **短接跳线帽** → PWR KEY `ON` 开电 → `FLS` 红灯亮。
-- **S600 V0P2**:PWR KEY `OFF` 关电 → `FLASH` 拨码 `ON` → PWR KEY `ON` 开电 → `FLS` 红灯亮。
+- **safe** (read-only, run directly): BPU/SoC monitoring, `free`/`df`/`dmesg`/`journalctl`, `cat /sys/...`, `ip addr`. Universal fallbacks: `cat /sys/devices/system/bpu/bpu0/ratio` (BPU load), `hrut_somstatus` (temp/voltage/clock).
+- **moderate** (changes state, confirm intent): `apt`/`pip`/`npm install`, `systemctl`, `nmcli`, `docker run`, `insmod`/`modprobe`, kernel-header builds.
+- **dangerous** (can destroy the system / needs explicit OK): `dd`, `mkfs`, `rm -rf /`, `fdisk`/`parted`, flash erase, `modules_install`/`depmod`, writes to `/boot` · `/lib/modules` · `/etc/fstab`, bootloader/initramfs changes. **Never run these before the board is confirmed.**
 
-**Xburn 烧录(全镜像)**:① 产品型号 S100 选 `RDKS100`、S600 选 `RDKS600` → ② 连接模式 `usb`、下载模式 `DFU+Fastboot`(空板/变砖)或 `Fastboot`(常规)→ ③ **介质 S100=`emmc`、S600=`ufs`**,固件类型 `secure` → ④ 选 product 固件目录 → **开始升级**,按提示上电 → ⑤ 完成关电,把烧录开关拨回退出 DFU,重新上电。
+## Workflow 1 — Confirm board & baseline
 
-**指定区域烧录(S100)**:Xburn 高级配置勾『烧录指定区域』可选 `miniboot_flash`/`miniboot_emmc`/`emmc`;备份产出 `.img`,**烧录时改后缀为 `.simg`** 再选。
+**Trigger:** identify board / 确认板型 / board profile / connected a new device / 不知道是哪块.
+**Precondition:** you have a shell (SSH, serial, or RDK Studio).
 
-**安全**:烧录是 **dangerous** 级(flash 擦写),先确认板型与 product 镜像匹配(别拿 S100 镜像刷 S600);进下载模式的拨码/跳线务必断电操作。首启约 45s 默认配置,HDMI 应出 Ubuntu 桌面。
+1. **Read board identity** `[safe]` — run the identity probe at the top of this file. Map output to X3/X5/Ultra/S100/S100P/S600. Unknown output → keep collecting logs.
+2. **Read OS/image version** `[safe]` — `cat /etc/version` (and `rdkos_info` on 2.1.0+). Package names, TROS path, and toolchain advice all depend on this.
+3. **Pick the BPU monitor by board** `[safe]` — X3: `hrut_smi`; X5/Ultra: `hrut_bpuprofile -b 0`; S-series: `hrut_bpuprofile`; universal fallback: `cat /sys/devices/system/bpu/bpu0/ratio`. (`hrut_smi`/`bputop` are NOT on X5.)
+4. **State the baseline back** — name board, SoC/BPU arch, OS version, and what's still unknown before giving any install/deploy/camera/TROS advice. Don't apply the X5 template to an unconfirmed board.
 
-来源:rdk_s_doc `docs/01_Quick_start/02_install_os/rdk_s100|rdk_s600/03_xburn/{01_windows,02_Linux}.md`。
+**Safety:** read-only only; no flashing/upgrade/GPIO output before the board is confirmed.
 
-## 故障速查:现象 → 切入点
+## Workflow 2 — S-series xburn flashing (DFU / Fastboot)
 
-按报错关键词归类,先用下表定位方向,再到 [常见故障速查(55 条)](references/failure-hints.md) 取具体命令与文档:
+**Trigger:** flash S100/S100P/S600 / xburn / enter download mode / DFU / Fastboot / bricked / blank-board flash. (X3/X5/Ultra use **SD card**, not xburn.) Full step-by-step: [xburn-flashing.md](references/xburn-flashing.md).
 
-- **摄像头**(`SIGABRT`/`exit code -6`/`No image data`/`VIDIOC_*`/`timeout`):USB 摄像头 99% 是 YUYV→改 MJPEG,分辨率先用 640x480;`v4l2-ctl -d /dev/video0 --list-formats-ext` 查支持档位,宽高/fps 必须精确匹配。
-- **模型/BPU**(`No such file *.bin/.hbm`/`OOM`/`model incompatible`/`unsupported op`):模型路径用 `find /opt/tros -name "*.bin"` 定位别靠相对路径;OOM 看 `cat /sys/devices/system/bpu/bpu0/ratio && free -h`;跨架构(X3=Bernoulli2 / X5·Ultra=Bayes / S100=Nash)hbm/bin 不通用,须用对应工具链重编。
-- **TROS/ROS2**(`command not found ros2`/`tros 包找不到`/`NO_PUBKEY`/`setup.bash No such file`):X3/X5/Ultra/S100/S100P 先 `source /opt/tros/humble/setup.bash`(humble);**RDK S600 是 Jazzy → `source /opt/tros/jazzy/setup.bash`**(Ubuntu 24.04,包名 `tros-jazzy-*`,别找 humble);APT 公钥失效按官方 TROS 文档重配 keyring;S100/S600 部分镜像需 `su - sunrise` 再 source。
-- **GPIO/I2C/串口/PWM**(`Permission denied`/`gpiochip not found`/`/dev/i2c`/`ttyUSB`):引脚缺总线多半未做 Pinmux 复用;gpiochip 编号各板不同别照抄 RPi,用 `gpiofind`;串口权限把用户加入 `dialout` 组后重新登录。
-- **供电/挂死**(`under-voltage`/`throttled`/`kernel panic`/`System halted`):首查供电(5V/3A 起,Ultra·S100 推荐 5V/5A),再查温度(>85°C 需散热),用官方电源避免 USB-A→USB-C 转接。
-- **网络/SSH**(`Connection refused`/`timeout`/`Host key verification failed`):`ip addr`+`ping`;重刷系统后 `ssh-keygen -R <ip>` 清旧密钥。
-- **设备未识别**(`No such device`/`ENODEV`):跑通用诊断 `dmesg | tail -50 && lsusb && ls /dev/tty* /dev/video* /dev/i2c-* /dev/snd/`,定位接口再针对性排查。
+1. **Host prep** — connect PC USB ↔ board **Type-C** with a high-quality short shielded cable. Linux: `sudo apt install android-tools-adb android-tools-fastboot dfu-util`. Windows: install `sunrise5_winusb` driver (run `install_driver.bat` as admin) + CH340 serial driver; serial **921600 / 8 / None / 1 / no flow control**.
+2. **Choose mode** — **DFU+Fastboot** for a blank/bricked board (must set hardware into DFU); **Fastboot** for a normal update (U-Boot boots, or type `fastboot 0` in U-Boot).
+3. **Enter DFU (per board):**
+   - **S100/S100P:** ① SW1 → ↑ (power off) → ② SW2 → ↑ (Download) → ③ SW1 → ▽ (power on) → ④ `DOWNLOAD` LED on (if not, press `K1`). Also set **SW3 = boot from on-board eMMC** (M.2 NVMe boot unsupported).
+   - **S600 V0P1:** PWR KEY `OFF` → short the jumper → PWR KEY `ON` → `FLS` red LED on.
+   - **S600 V0P2:** PWR KEY `OFF` → `FLASH` switch `ON` → PWR KEY `ON` → `FLS` red LED on.
+4. **Xburn settings (full image):** product `RDKS100` or `RDKS600` → connection `usb`, download mode `DFU+Fastboot` (blank/bricked) or `Fastboot` (normal) → **media: S100 = `emmc`, S600 = `ufs`**, firmware type `secure` → browse to the `product` firmware folder → Start. Power the board when prompted.
+5. **Finish** — on completion, power off, flip the boot switch back (exit DFU), power on. First boot does ~45 s of default config; HDMI should show the Ubuntu desktop. (S100 also supports region-specific flash: advanced config → `miniboot_flash` / `miniboot_emmc` / `emmc`; a backup `.img` must be renamed to `.simg` before flashing it back.)
 
-## 诊断命令安全分级
+**Safety:** flashing is **dangerous** (flash erase). Confirm the board matches the `product` image (don't flash an S100 image onto an S600); always set boot switches/jumpers with the board **powered off**.
 
-诊断命令按风险分 safe / moderate / dangerous([完整命令库](references/diagnostic-commands.md)):
+## Worked examples
 
-- **safe(只读,可直接用)**:BPU/SoC 监控、`free`/`df`/`dmesg`/`journalctl`、`cat /sys/...`、`ip addr`。全板通用兜底:`cat /sys/devices/system/bpu/bpu0/ratio`(BPU 占用)、`hrut_somstatus`(温度/电压/频率)。
-- **moderate(改系统状态,先确认意图)**:`apt`/`pip`/`npm install`、`systemctl`、`nmcli`、`docker run`、`insmod`/`modprobe`、kernel headers 编译。
-- **dangerous(可毁系统/需明确授权)**:`dd`、`mkfs`、`rm -rf /`、`fdisk`/`parted`、flash 擦写、`modules_install`/`depmod`、`/boot`·`/lib/modules`·`/etc/fstab` 写入、bootloader/initramfs 变更。确认板型前不执行刷机、升级或 GPIO 输出类操作。
+**Example 1 — "板子连不上，ssh 一直 timeout,是新到的 S100"**
+A fresh S100/S600 has **eth1 fixed at `192.168.127.10`** (eth0 is DHCP). Tell them: set the PC NIC to the same subnet (e.g. `192.168.127.100/24`), then `ssh root@192.168.127.10` or `ssh sunrise@192.168.127.10`. Don't chase Wi-Fi/router config first.
 
-## 硬件参考主题
+**Example 2 — "跑 ros2 launch 报 /opt/tros/humble/setup.bash: No such file,这是 S600"**
+On S600 the premise is wrong: **S600 is Ubuntu 24.04 / ROS2 Jazzy**, so TROS lives at `/opt/tros/jazzy/`, packages are `tros-jazzy-*`. `source /opt/tros/jazzy/setup.bash`. Humble paths are for X3/X5/Ultra/S100/S100P only.
 
-以下主题详见 [硬件与系统参考](references/hardware-notes.md):
+**Example 3 — "USB 摄像头 launch 一跑就 exit code -6 / SIGABRT"**
+Camera node crash, almost always format. Order: `ls /dev/video*` + `lsusb` → `v4l2-ctl -d /dev/video0 --list-formats-ext` to read real modes → set the launch to **MJPEG** at a resolution that exactly matches a listed entry (validate 640×480 first). Note the RDK USB-cam default node is `/dev/video8`. Don't tweak other params before the format matches.
 
-- 常见开发陷阱
-- 用户高频误区与一句话纠正
+**Example 4 — "我要给一块变砖的 S600 重新刷系统"**
+Route to Workflow 2 / xburn-flashing.md. Use **DFU+Fastboot** (blank/bricked). Enter DFU by board rev: V0P1 short the jumper, V0P2 set `FLASH` ON — both with PWR KEY OFF first, then ON until the `FLS` red LED lights. Xburn: product `RDKS600`, media `ufs`, type `secure`. Always power off before flipping switches.
 
-## 参考资料
+## Common pitfalls
 
-- [常见故障速查(55 条)](references/failure-hints.md)（含摄像头/模型/TROS/GPIO/供电/网络/设备识别等子类;遇具体报错时查）
-- [官方 FAQ 速查(按主题分组)](references/official-faq.md)（D-Robotics 官方 rdk_doc/rdk_s_doc 的 08_FAQ 全文要点 + 官方 URL + 覆盖板型;S 系列特有条目单列。failure-hints 是经验性"现象→建议",这里是官方"问题→答案要点",互补使用）
-- [诊断与系统命令](references/diagnostic-commands.md)
-- [硬件与系统参考(详细章节)](references/hardware-notes.md)
+| ❌ Don't | ✅ Do |
+|---------|------|
+| Assume X5 when the board is unconfirmed | Run the socinfo probe first; ask for logs if unclear |
+| Tell S600 users to source `humble` | S600 = Jazzy (`/opt/tros/jazzy`) |
+| Flash an X3/X5 image with xburn | xburn is S-series only; X-series use SD card |
+| Set xburn media wrong | S100/S100P = `emmc`, S600 = `ufs` |
+| Flip S-series boot switches while powered | Always power off first |
+| Use Raspberry Pi gpiochip numbers | `gpiofind "<line>"` — numbers differ per board |
+| Recite default-IP from memory | wired RDK is `192.168.127.10`; S eth1 is fixed there |
+| Say only `root/root` (or only `sunrise`) | Both `sunrise/sunrise` and `root/root` ship on every image |
+
+## Reference map
+
+| Read this | When |
+|-----------|------|
+| [failure-hints.md](references/failure-hints.md) | A concrete error string — 59 symptom→advice→doc entries (camera, model, TROS, GPIO, power, network, audio, S-series specifics) |
+| [official-faq.md](references/official-faq.md) | The official rdk_doc/rdk_s_doc `08_FAQ` Q&A points with URLs and board coverage (problem→answer); complements failure-hints |
+| [xburn-flashing.md](references/xburn-flashing.md) | Flashing an S100/S100P/S600 — full DFU/Fastboot steps, Xburn settings, region flash/backup, host driver setup |
+| [diagnostic-commands.md](references/diagnostic-commands.md) | Need a command's risk tier or board applicability before running it |
+| [hardware-notes.md](references/hardware-notes.md) | Common dev traps and the full misconception→correction catalog |

@@ -1,52 +1,104 @@
 ---
 name: rdk-multimedia
-description: 当用户要在 RDK 板上做"底层多媒体硬件流水线"时使用——硬件 H.264/H.265/JPEG/MJPEG 编解码、相机 VIN/ISP 取流、VPS/PYM 缩放裁剪旋转、HDMI/MIPI 显示输出,用 sp_dev(/app/cdev_demo C/Python API)、hobot_codec、HB_VIN/HB_VENC/HB_VDEC/HB_VPS/HB_VOT 接口,或 S 系 /app/multimedia_samples(sample_vin/isp/pym/gdc/codec/pipeline、sunrise_camera)、MediaCodec。本 skill 特指"裸用底层硬件单元搬运/编解码/缩放/显示像素流"。划清边界:把模型跑成 BPU 推理(.bin/.hbm 量化转换、视觉推理闭环)→rdk-device;把取流/编码包成 ROS2 节点(hobot_codec 作为 TROS 节点、image topic、usb_cam/mipi_cam launch)→rdk-ros;选哪款相机/IMU/扩展板硬件、CAM 接口接线→rdk-accessories;GPIO/I2C/PWM/电机等非视频外设→rdk-peripheral-cookbook。详细规格/分辨率上限/sp_dev 速查/X 与 S 差异见 references/multimedia-pipeline.md。
+description: Drive the RDK board's LOW-LEVEL multimedia hardware pipeline — hardware H.264/H.265/JPEG/MJPEG encode/decode, camera VIN/ISP capture, VPS/PYM scale-crop-rotate, HDMI/MIPI display — via sp_dev (/app/cdev_demo C/Python API) and HB_VIN/HB_VPS/HB_VENC/HB_VDEC/HB_VOT on X3/X5/Ultra, or the /app/multimedia_samples + MediaCodec stack on S100/S100P/S600. Use whenever the user moves raw pixel streams between hardware units (capture/encode/decode/scale/display) WITHOUT a ROS layer. 触发词:硬件编码、H264/H265/JPEG 编解码、VPU 软编很慢、stride 对齐报错、VPS 缩放、PYM 金字塔、多路缩放、HDMI/VOT 显示、sp_dev、cdev_demo、vio2encoder、decoder2display、rtsp2display、HB_VENC、HB_VPS、MediaCodec、sample_codec、S600 VPU 多核、IDU 显示。Routing — model inference / .bin/.hbm BPU deploy → rdk-device; capture-encode as a ROS2 node (hobot_codec, image topic, usb_cam/mipi_cam launch) → rdk-ros; which camera to buy / CAM wiring → rdk-accessories; UNSUPPORTED MIPI sensor that won't start (no MCLK / i2c NACK) → rdk-mipi-camera-bringup; GPIO/I2C/PWM/motors → rdk-peripheral-cookbook.
 ---
 
-# RDK 硬件多媒体流水线(编解码 / 取流 / 缩放 / 显示)
+# RDK Multimedia Hardware Pipeline (codec / capture / scale / display)
 
-> 来源:整理自 D-Robotics 官方文档 `rdk_doc`(X 系:`docs/07_Advanced_development/03_multimedia_development/**`、`docs/03_Basic_Application/06_multi_media_sp_dev_api/**`)与 `rdk_s_doc`(S 系:`docs/07_Advanced_development/03_multimedia_development/**`、`docs/03_Basic_Application/04_multi_media/**`),逐条保留出处;只写文档确有的事实。
+This skill moves **raw pixel streams between on-board hardware units**: sensor in → ISP tuned → scaled → VPU/JPU encoded/decoded → pushed out to HDMI/MIPI. It does **not** cover model inference (→ rdk-device) or wrapping any of this into a ROS node (→ rdk-ros).
 
-这个 skill 管的是"像素流怎么在板上的硬件单元之间搬运":相机进来、ISP 调好、VPS 缩放、VPU/JPU 编解码、HDMI 显示出去。**不**管模型推理(→rdk-device)、不管把这些包成 ROS 节点(→rdk-ros)。
+> Sources: official D-Robotics docs. X-series (`rdk_doc`): `docs/07_Advanced_development/03_multimedia_development/*` and `docs/03_Basic_Application/06_multi_media_sp_dev_api/RDK_X5/*`. S-series (`rdk_s_doc`): `docs/07_Advanced_development/03_multimedia_development/{01_S100,02_multimedia_application,03_S600_multimedia_application}/*`. Every spec below was re-verified against these files; numbers nobody could confirm are flagged in the reference's "Unverified" section.
 
-## 先认清流水线(回答任何问题前先定位用户卡在哪一段)
+## The one thing that matters most
 
-**X 系(X3=Bernoulli2、X5/Ultra=Bayes)流水线:**
-```
-sensor → VIN(SIF/MIPI 接入 + ISP 图像处理 + LDC/DIS/DWE 畸变防抖)
-       → VPS(IPU 缩放/裁剪/旋转 + PYM 金字塔 + GDC 矫正)
-       → VENC(VPU:H264/H265) / VDEC + JPU(JPEG/MJPEG)
-       → VOT(视频输出:HDMI / MIPI / BT1120,最大 1080P@60)
-```
-模块间在线/离线绑定走"系统控制"接口(如 `HB_SYS_SetVINVPSMode` 配 VIN↔VPS online/offline)。
+**X-series and S-series are two different multimedia stacks — do not map one onto the other.** The X-series VPS/VOT vocabulary (`HB_VPS_*`, `HB_VOT_*`, `sp_dev`) does **not** exist on the S-series; the S-series uses Camsys/PYM/GDC + MediaCodec + IDE/IDU instead. **Confirm the board family first, then pick the matching API column.** A user who pastes `HB_VOT_*` code on an S600 is on the wrong stack entirely.
 
-**S 系(S100/S100P/S600=Nash)换了一套术语——别拿 X 系的 VPS/VOT 套 S 系:**
-```
-Camera+SerDes → VIN(CIM + MIPI + LPWM + VCON)
-              → ISP → PYM(金字塔缩小/ROI) → GDC(几何畸变矫正)
-              → CODEC(VPU 视频 + JPU 图像,MediaCodec 子系统)
-              → IDE/IDU 显示(经 MIPI DSI / MIPI CSI2 Device 输出)
-```
-S 系还多了 STITCH(拼接)、YNR。S100 vs S600 的 MIPI/CIM/ISP 路数与分辨率上限不同,见 reference。
+## Stack cheat-sheet (pick the column for the board)
 
-## 两条开发路径,先问用户用哪条
+| Stage | X3 (Bernoulli2) / X5 (Bayes-e) / Ultra (Bayes) | S100 / S100P / S600 (Nash) |
+|-------|--------------------------------------|----------------------------|
+| Capture | **VIN** = SIF/MIPI in + ISP + LDC/DIS/DWE | **VIN** = CIM + MIPI + LPWM + VCON, then **ISP** |
+| Scale / crop / rotate | **VPS** (IPU scale/crop/rotate + PYM + GDC) | **PYM** (shrink/ROI) + **GDC** (geometric correct); **YNR** is a separate stage |
+| Video codec | **VENC / VDEC** → VPU (H264/H265) | **CODEC** → VPU, under **MediaCodec** subsystem |
+| Image codec | JPU (JPEG/MJPEG) | JPU (JPEG/MJPEG), under MediaCodec |
+| Display | **VOT** → HDMI / MIPI / BT1120, max 1080P@60 | **IDE / IDU** → MIPI DSI / MIPI CSI2 Device |
+| Easy user-space API | **sp_dev** (`/app/cdev_demo`, `sp_*`) | `/app/multimedia_samples` (HB_* / MediaCodec) |
+| Bind modules | `HB_SYS_Bind` / `HB_SYS_SetVINVPSMode` / `sp_module_bind` | pipeline samples wire stages in C |
 
-1. **sp_dev 简易封装(推荐新手 / 快速原型,X3/X5/Ultra)**:板上 `/app/cdev_demo/`,C 接口前缀 `sp_*`(也有 Python 封装)。四大模块 VIO / Encoder / Decoder / Display,模块串联用 `sp_module_bind`。现成 demo:`vio2encoder`(相机→编码存 .h264)、`decoder2display`(文件→HDMI)、`rtsp2display`(RTSP 拉流→HDMI)、VPS 缩放。**先让用户跑这些 demo 验证通路,再改代码。**
-2. **底层 HB_* 接口(要精细控制 GOP/码率/ROI/多路绑定)**:`HB_MIPI_*` / `HB_VIN_*` / `HB_VPS_*` / `HB_VENC_*` / `HB_VDEC_*` / `HB_VOT_*` + `HB_SYS_*` 绑定。S 系则用 `/app/multimedia_samples/` 下的 `sample_vin/isp/pym/gdc/codec/pipeline` 作模板,`sample_pipeline` 就是 VIN→ISP→PYM→GDC→CODEC 全链路。
+S-series adds **STITCH** (image stitching). The full X pipeline is `VIN → VPS → VENC/VDEC+JPU → VOT`; the full S pipeline is `Camera+SerDes → VIN → ISP → YNR → PYM → (GDC) → CODEC → IDE/IDU`.
 
-sp_dev 函数速查表、HB_* 模块对照、编解码规格/分辨率上限、码率控制五种模式、X 与 S 差异全表见 [多媒体流水线速查](references/multimedia-pipeline.md)。
+## Two development paths (ask the user which, before reading code)
 
-## 高频排障口径
+1. **sp_dev — the easy wrapper (X3/X5/Ultra, recommended for prototyping).** On-board at `/app/cdev_demo/`, C prefix `sp_*` (plus a Python binding). Four modules: **VIO / Encoder / Decoder / Display**, chained with `sp_module_bind`. Ready-made demos: `vio2encoder` (camera→.h264), `decoder2display` (file→HDMI), `rtsp2display` (RTSP→HDMI), VPS scaling. **Make the user run a demo to prove the path works before editing any code.**
+2. **Low-level HB_\* (need precise GOP/bitrate/ROI/multi-channel control).** `HB_MIPI_*` / `HB_VIN_*` / `HB_VPS_*` / `HB_VENC_*` / `HB_VDEC_*` / `HB_VOT_*` + `HB_SYS_*` binding. On the **S-series**, use the `/app/multimedia_samples/sample_{vin,isp,pym,gdc,codec,pipeline}` programs as templates — `sample_pipeline` is the full `VIN→ISP→YNR→PYM→(GDC)→CODEC` chain.
 
-- **"编码很慢 / CPU 占满 / ffmpeg 软编"**:确认走的是**硬件** VPU/JPU(sp_dev 或 HB_VENC),不是 CPU 软编码;ffmpeg 默认软编,要硬编需用 RDK 的硬件编码后端或 sp_dev。
-- **"编码报尺寸 / stride 错误"**:H264/H265 的 **stride 要 32 字节对齐、宽高 8 字节对齐**(JPEG 宽 16/高 8 对齐);不对齐要用 `VIDEO_CROP_INFO_S` 裁剪。规格表见 reference。
-- **"想缩放 / 多分辨率出图"**:用 VPS(X 系)或 PYM(S 系)。X 系 VPS 一个 IPU 最多 7 路输出,chn5 才能放大(≤1.5 倍),downscale 最多缩到原图 1/8;sp_dev 走 `sp_open_vps` / `sp_open_camera` 时一次设最多 5 组分辨率(1 组可放大、4 组缩小)。
-- **"相机取不到帧 / VIN 起不来"**:这是 ISP/sensor bringup 范畴;X5 上 MIPI 相机 bringup(尤其非官方支持 sensor、no MCLK / i2c NACK)走 `rdk-mipi-camera-bringup` skill,本 skill 只覆盖取流之后的处理链。选 sensor 型号/接线走 rdk-accessories。
-- **同一报错重复 2 次** → 停手查官方 doc(`rdk_doc` / `rdk_s_doc` 对应章节),别反复试同一参数。
-- **拿不准 X 与 S 哪个接口** → 先确认板型:X3/X5/Ultra 用 `docs/07_Advanced_development/03_multimedia_development/`(VPS/VOT 体系);S100/S600 用 `rdk_s_doc` 同名路径(Camsys/IDE 体系)。
+Full function tables, codec specs, resolution limits, bitrate modes, and the complete X-vs-S map are in [multimedia-pipeline.md](references/multimedia-pipeline.md). For a deterministic spec lookup, run `scripts/codec_spec.py <board> <unit>`.
 
-## 边界自检(避免越界到兄弟 skill)
+## Workflows
 
-- 用户最终目的是**模型推理结果**(检测框、分类),取流只是喂给模型 → 主体走 **rdk-device**,本 skill 只补取流/缩放细节。
-- 用户在 **ROS2/TROS** 里要 image topic、`hobot_codec` 节点、`mipi_cam`/`usb_cam` launch → **rdk-ros**。
-- 用户问"哪款相机能用 / 怎么接 CAM 排线 / IMU 选型" → **rdk-accessories**。
+### Workflow 1 — "Encoding is slow / CPU pinned / ffmpeg" (most common)
+
+1. **Confirm it is hardware, not software, encoding.** `ffmpeg` defaults to a **software** encoder (libx264) and pins the CPU. Hardware H264/H265/JPEG must go through the VPU/JPU — i.e. sp_dev (`sp_start_encode`), `HB_VENC_*`, or the S-series MediaCodec / `sample_codec`.
+2. **Route to the right API** by board family (cheat-sheet). Don't tune ffmpeg threads — switch the encode backend.
+3. **Prove the path** with a demo: `vio2encoder` on X, `sample_codec` on S. If FPS jumps, it was the software-codec trap.
+
+### Workflow 2 — Encode reports a size / stride / alignment error
+
+1. **Apply the alignment rule for the codec** (from the reference):
+   - **H.264/H.265:** stride **32-byte** aligned, width & height **8-byte** aligned.
+   - **JPEG/MJPEG:** stride **32-byte** aligned, width **16-byte**, height **8-byte** aligned.
+   - **S-series VPU:** width **32**, height **8** aligned.
+2. **If the raw frame isn't aligned**, crop with `VIDEO_CROP_INFO_S` (X-series) rather than forcing the encoder.
+3. Re-check that the resolution is within the unit's min/max (e.g. H264 min 256×128 on X3) before assuming a bug.
+
+### Workflow 3 — "I need to scale / output multiple resolutions"
+
+1. **X-series → VPS.** One IPU drives **7 output channels (chn0–chn6)**. chn0–chn4 downscale (to **1/8** of input, `> 1/8`); **chn5 is the only upscale channel (≤ 1.5×)**; chn6 is the PYM online channel.
+2. **sp_dev shortcut (X):** `sp_open_camera` / `sp_open_vps` set **up to 5 resolution groups** at once — 1 may upscale, 4 downscale. `sp_open_camera` upscale ≤ 1.5×; `sp_open_vps`'s standalone VPS supports a larger upscale (doc lists up to 4×). Validate at a low resolution first.
+3. **S-series → PYM** (shrink + ROI) and **GDC** for geometric correction — there is no "VPS". PYM min output is 32×32.
+
+### Workflow 4 — Display output (HDMI / MIPI panel)
+
+1. **X-series → VOT.** Outputs RGB / BT1120(BT656) / MIPI, all max **1080P@60fps**. sp_dev: `sp_start_display` + `sp_display_set_image`; overlay with `sp_display_draw_rect` / `sp_display_draw_string`.
+2. **S-series → IDE/IDU.** S100 has **2 IDUs, 6 channels** (ch 0/1/4/5 = YUV layers, 2/3 = RGB layers), max input **2880×2160** per channel; YUV layers Up-Scale up to **6×**; output via **MIPI DSI or MIPI CSI2 Device** (they share one MIPI D-PHY). There is no `HB_VOT_*` here.
+
+### Workflow 5 — S600-specific: VPU multi-core
+
+1. **Only S600 exposes multiple VPU cores.** In the MediaCodec `sample_codec` (the `-m/-c/-w/-h/-p/-n/-u` variant), `-u` selects the VPU core id (default 0, values **0/1/2**). On S100/S100P the `-u` flag has no effect.
+2. **Don't confuse the two same-named samples:** the `-u` core flag is on the MediaCodec API sample (`./sample_codec --samplemode ...`); the `/app/multimedia_samples/sample_codec` config-file program (`-f codec_config.ini -e/-d <bitmask>`) has **no `-u`**.
+3. Encode ceilings are shared S100/S600: **H264 High@L5.2**, **H265 Main / Main-tier @L5.1**, MJPEG/JPEG ISO/IEC 10918-1 Baseline sequential.
+
+**Stop rule:** if the same error repeats twice, stop retrying the same parameter — read the matching `rdk_doc` / `rdk_s_doc` chapter and the board log instead.
+
+## Worked examples
+
+**Example 1 — "我用 ffmpeg 编码 H264 把 CPU 占满了，RDK 上怎么硬件编码?"**
+ffmpeg defaults to a software encoder, which is why the CPU is pinned. On X3/X5/Ultra use sp_dev (`sp_start_encode` with `SP_ENCODER_H264`) or `HB_VENC_*` to hit the VPU; the quickest proof is the `vio2encoder` demo in `/app/cdev_demo/`. On S100/S600 use the MediaCodec `sample_codec`. The VPU does up to 4K@60 (X3) / 4K@90 (S). Then point to Workflow 1.
+
+**Example 2 — "VPS 一个 IPU 能出几路?哪一路能放大?"**
+On the X-series VPS, one IPU drives **7 channels (chn0–chn6)**: chn0–chn4 downscale (down to 1/8), **chn5 is the only upscale channel, max 1.5×**, chn6 is the PYM online channel. Via sp_dev you set up to 5 resolution groups in one `sp_open_camera`/`sp_open_vps` call (1 up, 4 down). Note this is X-series only — S-series uses PYM, not VPS.
+
+**Example 3 — "S600 编解码示例里的 -u 是干嘛的?S100 上为什么不生效?"**
+`-u` selects the **VPU core id** (default 0, values 0/1/2) in the MediaCodec `sample_codec` (the `--samplemode` variant). **Only S600 has multiple VPU cores**, so `-u` only takes effect on S600 — on S100/S100P it does nothing. The config-file `sample_codec` (`-f ... -e/-d`) doesn't have `-u` at all. (Run `scripts/codec_spec.py s600 vpu` for the spec.)
+
+**Example 4 — "编码报 stride/尺寸错误,我的图是 1920×1082"**
+H.264/H.265 require width & height **8-byte aligned** and stride **32-byte aligned**; 1082 isn't 8-aligned. Either capture/scale to an 8-aligned height (1080) or crop with `VIDEO_CROP_INFO_S`. Don't keep resubmitting the same frame to the encoder. Check Workflow 2.
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+|---------|------|
+| Use ffmpeg software encode and blame the CPU | Use sp_dev / HB_VENC / MediaCodec for the hardware VPU/JPU |
+| Paste `HB_VPS_*` / `HB_VOT_*` code on an S-series board | Use Camsys/PYM/GDC + MediaCodec + IDE/IDU on S100/S600 |
+| Feed an unaligned frame (e.g. height 1082) to the encoder | Align (W/H 8, stride 32) or crop with `VIDEO_CROP_INFO_S` |
+| Expect upscale on any VPS channel | Only chn5 upscales (≤1.5×); chn0–4 are downscale |
+| Assume `-u` multi-core works on S100 | `-u` (VPU core 0/1/2) is S600-only |
+| Treat the two `sample_codec` programs as identical | Config-file (`-f -e/-d`) vs MediaCodec API (`--samplemode -u`) are different |
+| Debug a sensor that won't start here | No-MCLK / i2c-NACK bringup → rdk-mipi-camera-bringup |
+
+## Reference map
+
+| Read this | When |
+|-----------|------|
+| [multimedia-pipeline.md](references/multimedia-pipeline.md) | Need exact specs — codec resolution/alignment/instance limits, bitrate modes, VPS channel table, sp_dev function signatures, full X↔S unit map, S100-vs-S600 MIPI/CIM/ISP counts |
+| `scripts/codec_spec.py <board> <unit>` | Quick deterministic lookup of a codec/display unit's limits without reciting the table |

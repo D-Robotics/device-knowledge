@@ -1,119 +1,134 @@
-# RDK 外设驱动食谱 · 硬件与系统参考
+# RDK Peripheral Cookbook · Hardware & System Notes
 
-> 来源:整理自 D-Robotics RDK 官方文档、工具链与社区实践,逐条保留出处链接;由 device-knowledge 知识库忠实转换而来,未改写技术事实。
+> Sources: D-Robotics RDK official docs (rdk_doc / rdk_s_doc 40pin user guide, X5 hardware), the x5-hobot-io toolchain, and standard cross-platform Linux peripheral practice. Board-specific claims are verified against the cited source; cross-platform Linux facts (libgpiod, ALSA, PCA9685, WS2812-over-SPI) are industry-standard and marked as such.
 
-本文汇集本 skill 涉及的 RDK 硬件/系统章节,逐节整理自官方文档与实践,供需要细节时查阅。
+## Table of contents
 
-### 12. X5 板端 IO 加速库（x5-hobot-io / x5-hobot-utils）
+- [X5 board-side IO acceleration libraries](#x5-board-side-io-acceleration-libraries)
+- [40PIN cross-platform pin & bus mapping](#40pin-cross-platform-pin--bus-mapping) — the first step before any peripheral wiring
+- [libgpiod: the universal cross-platform GPIO API](#libgpiod-the-universal-cross-platform-gpio-api)
+- [Servos: single servo to multi-channel PCA9685](#servos-single-servo-to-multi-channel-pca9685)
+- [Motors: the three driving paradigms](#motors-the-three-driving-paradigms)
+- [LEDs: single-color to WS2812 strip](#leds-single-color-to-ws2812-strip)
+- [Audio: the ALSA fallback path](#audio-the-alsa-fallback-path)
+- [Zero-driver diagnosis SOP](#zero-driver-diagnosis-sop)
 
-- **x5-hobot-io**：<https://github.com/D-Robotics/x5-hobot-io>，C 语言绑定 X5 的 GPIO/I2C/SPI/PWM/UART，比 Python `Hobot.GPIO` 延迟低 ~10x
-  - 适用于实时控制（电机、舵机、传感器轮询）
-  - 编译需 RDK X5 工具链；交叉编译看 README
-- **x5-hobot-utils**：<https://github.com/D-Robotics/x5-hobot-utils>，X5 平台诊断/刷机辅助工具集
+---
 
-### 23. 40PIN 跨平台引脚与接口深度对照（外设驱动第一步）
+## X5 board-side IO acceleration libraries
 
-> 用户问"怎么接 XX"时，先问清**板型**再回答；各板 40PIN 物理位置虽然一致，但电源能力 / GPIO 编号 / I2C 总线号 / PWM 路径**全都不一样**。
+- **x5-hobot-io** — <https://github.com/D-Robotics/x5-hobot-io>. C bindings for X5 GPIO/I2C/SPI/PWM/UART, roughly 10× lower latency than Python `Hobot.GPIO`. Use for real-time control (motors, servos, sensor polling). Building needs the RDK X5 toolchain; cross-compile per the repo README.
+- **x5-hobot-utils** — <https://github.com/D-Robotics/x5-hobot-utils>. X5 diagnostics / flashing helper tools.
 
-**40PIN 物理布局四家一致**（抄自 RPi 3B+）：`Pin 1 = 3.3V`，`Pin 2/4 = 5V`，`Pin 6/9/14/20/25/30/34/39 = GND`。物理**没差异**，差异在电气与编号。
+---
 
-**电源承载能力对照（驱舵机/灯带必看）**：
+## 40PIN cross-platform pin & bus mapping
 
-| 平台 | 40PIN 5V 上限 | 舵机/灯带取电建议 |
-|------|----------------|------------------|
-| RPi 5 | ~600mA 共享 | **必须外接 5V 电源**，共 GND 回板 |
-| Jetson Orin Nano | ~1A | 单舵机勉强可，多舵机必外接 |
-| RK3588（Orange Pi 5）| ~800mA | 同 Jetson |
-| **RDK X5 / S100** | X5 官方 40PIN 标注为 1A @ 3.3V / 1A @ 5V；S100 需按扩展板电源预算核对 | **舵机/电机/灯带一律外接 5V/6V 电源，共 GND** |
+> When the user asks "how do I wire X", confirm the **board model** first. The 40PIN physical positions are identical across vendors, but **power capacity, GPIO numbering, I2C bus number, and PWM path all differ.**
 
-> Moss 看到 "从 Pin 2 取 5V 驱动一个 SG90 舵机" → 可接；"驱动 4 个舵机 / WS2812 灯带 30 颗以上" → **必须警告外接电源**，否则掉电重启。
+**Physical layout is identical across the four vendors** (copied from RPi 3B+): `Pin 1 = 3.3V`, `Pin 2/4 = 5V`, `Pin 6/9/14/20/25/30/34/39 = GND`. No physical difference — the difference is electrical and in numbering.
 
-**GPIO 编号方案对照（同一物理 Pin 11，名字四家不一样）**：
+### Power capacity (essential before driving servos/strips)
 
-| 平台 | 编号方案 | Pin 11 叫什么 | 用户态主 API |
-|------|---------|---------------|--------------|
+| Platform | 40PIN 5V limit | Servo / strip power advice |
+|----------|----------------|----------------------------|
+| RPi 5 | ~600mA shared | **External 5V supply required**, common GND |
+| Jetson Orin Nano | ~1A | One servo marginal; multiple → external |
+| RK3588 (Orange Pi 5) | ~800mA | Same as Jetson |
+| **RDK X5 / S100** | X5 marks 40PIN as 1A @ 3.3V / 1A @ 5V; on S100 verify against the expansion-board power budget | **Always external 5V/6V for servos/motors/strips, common GND** |
+
+> "Take 5V from Pin 2 to drive one SG90" → acceptable. "Drive 4 servos / a WS2812 strip of 30+" → **warn: external supply required**, or the board browns out and reboots.
+
+### GPIO numbering (same physical Pin 11, four different names)
+
+| Platform | Scheme | Pin 11 name | User-space API |
+|----------|--------|-------------|----------------|
 | RPi | BCM | `GPIO17` | `RPi.GPIO` / `gpiozero` / **`libgpiod`** |
-| Jetson Orin Nano | tegra-gpio | `PQ.05`（chip0 line 144） | `Jetson.GPIO` / **`libgpiod`** |
-| RK3588 | `GPIOx_yZ`（bank_group_pin） | `GPIO3_C6`（= 3×32 + 2×8 + 6 = 118） | `OPi.GPIO` / **`libgpiod`** |
-| **RDK X3** | Hobot 自定义编号 | 查 X3 pinout 表 | `Hobot.GPIO` / `libwiringpi` / **`libgpiod`** |
-| **RDK X5** | Hobot 自定义编号 | 查 X5 pinout 表 | `Hobot.GPIO` / `x5-hobot-io` / **`libgpiod`** |
+| Jetson Orin Nano | tegra-gpio | `PQ.05` (chip0 line 144) | `Jetson.GPIO` / **`libgpiod`** |
+| RK3588 | `GPIOx_yZ` (bank_group_pin) | `GPIO3_C6` (= 3×32 + 2×8 + 6 = 118) | `OPi.GPIO` / **`libgpiod`** |
+| **RDK X3** | Hobot custom | check the X3 pinout table | `Hobot.GPIO` / `libwiringpi` / **`libgpiod`** |
+| **RDK X5** | Hobot custom | check the X5 pinout table | `Hobot.GPIO` / `x5-hobot-io` / **`libgpiod`** |
 
-> **唯一跨四家通用的底层 API = `libgpiod`**（见下一节）；Moss 写跨板脚本**优先推 libgpiod**，不要去猜 BCM 号。
+> The only API common to all four = **`libgpiod`** (next section). For cross-board scripts, prefer libgpiod and don't guess BCM numbers.
 
-**I2C 总线号对照（做传感器 / PCA9685 必查）**：
+### I2C bus mapping (essential for sensors / PCA9685)
 
-| 平台 | 40PIN 对外可用 I2C | 设备节点 | 激活方式 |
-|------|-------------------|----------|----------|
-| RPi | I2C1（Pin3/5） | `/dev/i2c-1` | `raspi-config` → Interface → I2C |
-| Jetson Orin Nano | I2C1（Pin3/5）、I2C8（Pin27/28） | `/dev/i2c-7`（Orin 实际编号）| 默认开 |
-| RK3588 | I2C3/7/8 对外 | `/dev/i2c-3` 等 | 需 `overlay` 使能 |
-| **RDK X3** | 40PIN 实际 **2 路**(I2C0 Pin3/5) | `/dev/i2c-0/1` | 用 `srpi-config` 切复用 |
-| **RDK X5** | 40PIN 实际 **2 路**(I2C5 Pin3/5 + I2C0 Pin27/28) | `/dev/i2c-*` 系统列更多 | 同上;注:旧表"3路"是系统级控制器数 |
-| **RDK S100** | 40PIN 实际 **2 路**(I2C5 Pin3/5 + I2C4 Pin27/28) | `/dev/i2c-0..5` | I2C5 与 UART2 经**拨码开关**二选一;"4路"是 SoC 级 |
-| **RDK S600** | **无标准 40PIN**(自锁口,1.8V) | — | 数字 IO 走 10/12/14-pin 自锁口,见 rdk-hardware |
+| Platform | 40PIN exposed I2C | Device node | How to enable |
+|----------|-------------------|-------------|---------------|
+| RPi | I2C1 (Pin 3/5) | `/dev/i2c-1` | `raspi-config` → Interface → I2C |
+| Jetson Orin Nano | I2C1 (Pin 3/5), I2C8 (Pin 27/28) | `/dev/i2c-7` (Orin actual number) | on by default |
+| RK3588 | I2C3/7/8 exposed | `/dev/i2c-3` etc. | overlay required |
+| **RDK X3** | 2 lines on 40PIN (I2C0 Pin 3/5) | `/dev/i2c-0/1` | `srpi-config` to switch mux |
+| **RDK X5** | 2 lines on 40PIN (I2C5 Pin 3/5 + I2C0 Pin 27/28) | `/dev/i2c-*` (system lists more) | same; the old "3 lines" was the SoC controller count |
+| **RDK S100** | 2 lines on 40PIN (I2C5 Pin 3/5 + I2C4 Pin 27/28) | `/dev/i2c-0..5` | I2C5 muxes with UART2 via **dip switch**; "4 lines" is SoC-level |
+| **RDK S600** | **no standard 40PIN** (self-locking, 1.8V) | — | digital IO on 10/12/14-pin self-locking connectors — see rdk-hardware |
 
-> **RDK 特有坑**：① 同一 40PIN 引脚可能默认配成 GPIO,先用 **`sudo srpi-config` → `3 Interface Options` → 总线配置**(或板上 `/app/40pin_samples/` 脚本)切到 I2C/SPI/UART/PWM 模式,`/dev/i2c-X`、`pwmchip` 才出现。② 上表 RDK 行是 **40PIN 对外实际可用数**;SoC 级总线更多(在 MCU/相机扩展口上)。排查:`ls /dev/i2c-*` → 不见想要的总线 → 跑 srpi-config/脚本 → 再看。
+> **RDK-specific traps:** ① a 40PIN pin may default to GPIO — on X-series switch the function with `sudo srpi-config` → `3 Interface Options` → `I3 Peripheral bus config` (or the `/app/40pin_samples/` scripts) before `/dev/i2c-X` / `pwmchip` appears. ② The RDK rows above are the **40PIN-exposed** count; the SoC has more buses (on MCU / camera expansion ports). Diagnose: `ls /dev/i2c-*` → bus missing → run srpi-config / script → recheck.
+> S100 verified: 40PIN defaults to I2C5 (Pin 3/5) + I2C4 (Pin 27/28), 3.3V; `test_i2c.py` lists `/dev/i2c-0 .. /dev/i2c-5` (rdk_s_doc 40pin_user_guide/01_s100/05_i2c.md).
 
-**PWM 路数与 `pwmchip` 路径对照（舵机 / 电机调速命门）**：
+### PWM channels & `pwmchip` path (key for servos / motor speed)
 
-| 平台 | 硬件 PWM 路数 | 控制路径 | 激活动作 |
-|------|--------------|----------|----------|
-| RPi | 2（PWM0 / PWM1） | `/sys/class/pwm/pwmchip0/pwm{0,1}/` | `dtoverlay=pwm-2chan` |
-| Jetson Orin Nano | 3 | `/sys/class/pwm/pwmchip*/` | **必须先 `sudo /opt/nvidia/jetson-io/jetson-io.py`** 改 Pinmux |
-| RK3588 | 多路（PWM14/15 常用） | `/sys/class/pwm/pwmchipN/` | 需 overlay |
-| **RDK X3** | 40PIN 2 路 | `/sys/class/pwm/pwmchipN/pwmM/` | `srpi-config` 切复用 |
-| **RDK X5** | 40PIN 实际几路(SoC 级 8) | 同上 | `srpi-config` 切复用 |
-| **RDK S100** | 40PIN 实际 **2 路 LPWM**(Pin32/33,48KHz~192MHz) | Hobot.GPIO 控制 | "8 路"是 SoC 级;MCU 域 PWM 走固件不在 40PIN |
+| Platform | HW PWM channels | Control path | How to enable |
+|----------|-----------------|--------------|---------------|
+| RPi | 2 (PWM0 / PWM1) | `/sys/class/pwm/pwmchip0/pwm{0,1}/` | `dtoverlay=pwm-2chan` |
+| Jetson Orin Nano | 3 | `/sys/class/pwm/pwmchip*/` | **must run `sudo /opt/nvidia/jetson-io/jetson-io.py`** to change pinmux |
+| RK3588 | several (PWM14/15 common) | `/sys/class/pwm/pwmchipN/` | overlay required |
+| **RDK X3** | 2 on 40PIN | `/sys/class/pwm/pwmchipN/pwmM/` | `srpi-config` mux |
+| **RDK X5** | a few on 40PIN (SoC-level 8) | same | `srpi-config` mux |
+| **RDK S100** | 2 LPWM on 40PIN (Pin 32/33, 48KHz~192MHz), `Hobot.GPIO` | — | "8 lines" is SoC-level; MCU-domain PWM is in firmware, not on 40PIN |
 
-> **多舵机（≥3 路）结论**：**四家都推 PCA9685 + I2C**，理由是省板子 PWM / 跨板可移植 / Python 库成熟（见第 25 节）。
+> **Conclusion for ≥3 servos:** all four vendors recommend PCA9685 + I2C — it saves board PWM, is portable across boards, and has mature Python libraries (see Servos).
 
-**UART / 串口对照**：
+### UART / serial mapping
 
-| 平台 | 40PIN 对外 UART | 节点 | 坑 |
-|------|-----------------|------|----|
-| RPi | Pin 8/10 | `/dev/ttyS0`（mini UART）/ `/dev/ttyAMA0` | 要 `dtoverlay=disable-bt` 让主 UART 出来 |
-| Jetson Orin Nano | Pin 8/10 | `/dev/ttyTHS1` | 默认 root 占用，要 `systemctl disable nvgetty` |
-| RK3588 | Pin 8/10 | `/dev/ttyS0/3` | 需 overlay |
-| **RDK X5** | 40PIN 实际 **1 路**(UART1 Pin8/10,`/dev/ttyS1`) | `ttyS0` 是系统调试口 | "5 路"是 SoC 级;`ttyS` 普通 / `ttyHS` 高速 |
-| **RDK S100** | 40PIN 实际 **1 路**(UART2 Pin8/10,默认未使能,与 I2C5 拨码复用) + **独立 MCU Domain UART 调试口** | 同上 | "6 路"是 SoC 级;Main/MCU 两调试口别弄混(见 MCU 章节)|
+| Platform | 40PIN UART | Node | Trap |
+|----------|-----------|------|------|
+| RPi | Pin 8/10 | `/dev/ttyS0` (mini UART) / `/dev/ttyAMA0` | `dtoverlay=disable-bt` to free the main UART |
+| Jetson Orin Nano | Pin 8/10 | `/dev/ttyTHS1` | root holds it by default → `systemctl disable nvgetty` |
+| RK3588 | Pin 8/10 | `/dev/ttyS0/3` | overlay required |
+| **RDK X5** | 1 line on 40PIN (UART1 Pin 8/10, `/dev/ttyS1`) | `ttyS0` is the system debug port | "5 lines" is SoC-level; `ttyS` normal / `ttyHS` high-speed |
+| **RDK S100** | 1 line on 40PIN (UART2 Pin 8/10, not enabled by default, muxed with I2C5 via dip switch) + a separate MCU-domain UART debug port | `/dev/ttyS2` | "6 lines" is SoC-level; don't confuse the Main vs MCU debug ports |
 
-> **万能兜底**：USB 转 TTL（`/dev/ttyUSB0`）跨所有平台**一样用**；Dynamixel / Feetech 总线舵机、GPS、LoRa 模块几乎都直接 USB 接入，不用纠结板载 UART。
+> **Universal fallback:** a USB-to-TTL adapter (`/dev/ttyUSB0`) works the same on every platform. Dynamixel / Feetech bus servos, GPS, LoRa modules almost all attach over USB — no need to fight over board UART.
+> S100/S600 serial verified (rdk_s_doc 04_uart): test X5 → `/dev/ttyS1`, S100 → `/dev/ttyS2`, S600 → `/dev/ttyS6` or `/dev/ttyS7`. `/dev/ttyS0` is the system debug port — don't test it.
 
-**SPI / CAN / 音频 / CSI 要点**：
+### SPI / CAN / Audio / CSI essentials
 
-| 能力 | 说明 |
-|------|------|
-| SPI | RDK X3 仅 1 路 / X5 两路；路径 `/dev/spidev0.0`；**WS2812 灯带靠 SPI MOSI 模拟时序**（见第 27 节）|
-| **CAN**（RDK 强项）| RPi 无板载（需 MCP2515 HAT）；**X5 = 标准 Linux SocketCAN**（集成 TCAN4550，`ip link set can0 ... fd on` + `cansend`/`candump`，经典 CAN 1M / CAN FD 数据段 2M）；**S100 / S600 的 CAN 在 MCU 域**，不是 SocketCAN，走 CANHAL/IPC + `/app/Can` sample（见 [CAN 与板级 IO](rdk-can-and-board-io.md)）；X3 无板载 CAN |
-| 音频 | **Jetson 无板载音频**（这是 Jetson 名梗）；RPi 4 有 3.5mm，RPi 5 砍掉；RDK 多数型号通过 40PIN I2S 接 HAT 或走 USB 声卡（见第 28 节） |
-| CSI 相机 | RPi / Jetson 走 22Pin 排线；RDK X5 4-lane、X3 仅 2-lane；**S100 独占 GMSL2 车规相机**，需扩展板 |
+| Capability | Note |
+|------------|------|
+| SPI | RDK X3 has 1 line / X5 has 2; node `/dev/spidev0.0`; **WS2812 strips ride SPI MOSI to emulate the timing** (see LEDs) |
+| **CAN** | RPi has none on-board (needs an MCP2515 HAT); **X5 = standard Linux SocketCAN** (integrated TCAN4550, `ip link set can0 ... fd on` + `cansend`/`candump`, classic CAN 1M / CAN FD data phase 2M); **S100 / S600 CAN is in the MCU domain** — not SocketCAN — via CANHAL/IPC + the `/app/Can` sample (see [rdk-can-and-board-io.md](rdk-can-and-board-io.md)); X3/Ultra have no on-board CAN |
+| Audio | **Jetson has no on-board audio** (the classic Jetson gotcha); RPi 4 has a 3.5mm jack, RPi 5 dropped it; most RDK models reach audio over 40PIN I2S to a HAT or via a USB sound card (see Audio) |
+| CSI camera | RPi / Jetson use a 22-pin ribbon; RDK X5 is 4-lane, X3 only 2-lane; **S100 has GMSL2 automotive cameras** via an expansion board |
 
-> **CAN / S100 拨码 / S600 自锁口外设**的完整实操(X5 SocketCAN 仲裁域+数据域 `ip link`、S100/S600 MCU 域 CAN 通道映射与 CANHAL、S100 I2C5↔UART2 拨码二选一、S600 1.8V 自锁口 GPIO/UART6-7/SPI1)见独立参考 [CAN 与板级 IO 实操](rdk-can-and-board-io.md)。
+> Full hands-on for **CAN / S100 dip switch / S600 self-locking IO** (X5 SocketCAN arbitration+data phase `ip link`, S100/S600 MCU-domain CAN channel mapping and CANHAL, S100 I2C5↔UART2 dip mux, S600 1.8V self-locking GPIO/UART6-7/SPI1) is in [rdk-can-and-board-io.md](rdk-can-and-board-io.md).
 
-### 24. libgpiod：跨平台通用 GPIO 统一 API（强烈推荐）
+---
 
-> 四家板子（RPi / Jetson / RK / RDK）**都支持** `libgpiod`，这是 Linux 4.8+ 内核推荐的 GPIO 用户态 API，取代已废弃的 `/sys/class/gpio`。Moss 写跨板脚本或不确定编号时，**首选这套**。
+## libgpiod: the universal cross-platform GPIO API
 
-**安装**（所有平台一致）：
+> All four boards (RPi / Jetson / Rockchip / RDK) support `libgpiod`, the Linux 4.8+ recommended user-space GPIO API that replaces the deprecated `/sys/class/gpio`. For cross-board scripts or when unsure of the numbering, prefer this.
+
+**Install** (same on every platform):
 ```bash
-sudo apt install gpiod python3-libgpiod   # 命令行工具 + Python 绑定
+sudo apt install gpiod python3-libgpiod   # CLI tools + Python bindings
 ```
 
-**4 个核心命令**：
+**Four core commands:**
 ```bash
-gpiodetect                    # 列出所有 gpiochip（如 gpiochip0, gpiochip1...）
-gpioinfo gpiochip0            # 看每条 line 的名字（有名字的可直接按名操作）
-gpioset gpiochip0 17=1        # 置高（line 17）
-gpioget gpiochip0 17          # 读电平
+gpiodetect                    # list every gpiochip (gpiochip0, gpiochip1, ...)
+gpioinfo gpiochip0            # each line's name (named lines can be addressed directly)
+gpioset gpiochip0 17=1        # drive line 17 high
+gpioget gpiochip0 17          # read level
 ```
 
-**用名字操作**（最优写法，跨板最稳）：
+**Operate by name** (most portable):
 ```bash
-gpiofind "GPIO17"                          # 反查所在 chip 与 line
-gpioset $(gpiofind "GPIO17")=1             # 置高，一行搞定
+gpiofind "GPIO17"                          # resolve which chip & line
+gpioset $(gpiofind "GPIO17")=1             # drive high in one line
 ```
 
-**Python 最小示例**（RPi / Jetson / RK / RDK 都能跑）：
+**Minimal Python** (runs on RPi / Jetson / RK / RDK):
 ```python
 import gpiod, time
 chip = gpiod.Chip('gpiochip0')
@@ -125,53 +140,53 @@ for _ in range(10):
 line.release()
 ```
 
-**libgpiod vs 其他 API 选择矩阵**：
+**libgpiod vs other APIs:**
 
-| 场景 | 推荐 |
-|------|------|
-| 要和树莓派现有教学代码兼容 | `Hobot.GPIO`（RDK）/ `Jetson.GPIO`（Jetson）——API 都抄 `RPi.GPIO` |
-| 写一份脚本跑多个平台 | **`libgpiod`** |
-| 实时 / 低延迟（< 1ms 抖动敏感）| C 直接调 `libgpiod` 或 `x5-hobot-io`（X5 专用，见第 12 节）|
-| 简单闪灯 / 按键读取 | `gpioset` / `gpioget` 命令一行搞定 |
+| Scenario | Recommended |
+|----------|-------------|
+| Compatibility with existing RPi tutorial code | `Hobot.GPIO` (RDK) / `Jetson.GPIO` (Jetson) — both copy `RPi.GPIO` |
+| One script across multiple platforms | **`libgpiod`** |
+| Real-time / low jitter (<1ms) | C calling `libgpiod` or `x5-hobot-io` (X5-only) |
+| Simple blink / button read | `gpioset` / `gpioget` one-liners |
 
-> **Moss 遇到"GPIO 不工作"类问题**：先 `gpiodetect` → `gpioinfo <chip>`，直接用**名字**定位，不要让用户翻 BCM 表；这是对四平台都通用的方法。
+> For "GPIO not working" problems: `gpiodetect` → `gpioinfo <chip>`, then address by **name** — don't make the user dig through a BCM table. `import Hobot.GPIO` works on **system Python only** (fails inside conda/venv).
 
-### 25. 舵机控制：单舵机到多路 PCA9685 标准方案
+---
 
-**单舵机（1–2 路）走板载硬件 PWM**：
+## Servos: single servo to multi-channel PCA9685
 
-舵机信号本质 = **50Hz（周期 20ms）+ 1.0ms(0°) ~ 2.0ms(180°) 正脉宽**（SG90 等标准）。RDK / RPi / Jetson / RK 通用 sysfs 控制代码（先切 Pinmux，得到 `/sys/class/pwm/pwmchipN/`）：
+### Single servo (1–2 ch) — on-board hardware PWM
+
+Servo signal = **50Hz (20ms period) + a 1.0ms (0°) to 2.0ms (180°) positive pulse** (SG90 etc.). Cross-platform sysfs control (after switching the pin to PWM mode, giving `/sys/class/pwm/pwmchipN/`):
 
 ```bash
-cd /sys/class/pwm/pwmchip0              # 板型不同 N 不同，用 ls 确认
+cd /sys/class/pwm/pwmchip0              # N differs by board — confirm with ls
 echo 0 > export
 echo 20000000 > pwm0/period             # 20ms = 50Hz
-echo 1500000  > pwm0/duty_cycle         # 1.5ms = 90°（中位）
+echo 1500000  > pwm0/duty_cycle         # 1.5ms = 90° (center)
 echo 1        > pwm0/enable
 ```
 
-角度 → duty_cycle 公式（ns 单位）：
+Angle → duty_cycle (ns):
 ```
-duty_cycle = 1_000_000 + (angle / 180) * 1_000_000   # 1ms ~ 2ms
+duty_cycle = 1_000_000 + (angle / 180) * 1_000_000   # 1ms to 2ms
 ```
 
-> **安全铁律**：舵机**绝不能从 40PIN Pin 2/4 取 5V 供电**，哪怕只有 1 个 SG90 —— 瞬时堵转电流可达 1A，会拉低板子 5V 导致重启。**始终用外部 5V/6V 电源，信号线和板子共 GND**。
+> **Safety rule:** never power a servo from 40PIN Pin 2/4, even one SG90 — instantaneous stall current can reach ~1A and brown out the board. Always external 5V/6V, signal line and board sharing GND.
 
-**多舵机（≥3 路）一律用 PCA9685 + I2C**（四平台事实标准）：
+### Multiple servos (≥3 ch) — PCA9685 + I2C (the de-facto standard)
 
-| 参数 | 值 |
-|------|----|
-| 硬件 | PCA9685 16 通道 PWM 扩展板（常见低成本模块，通常内置 5V LDO） |
-| 接线 | I2C SDA/SCL/VCC/GND + 独立电源 V+ 给舵机 |
-| I2C 默认地址 | **`0x40`**（A0–A5 可跳线改地址，多片级联最多 62 个） |
-| 频率 | `set_pwm_freq(50)` 标准舵机；LED 调光用 1000 |
-| 分辨率 | 12 位（0–4095） |
-
-**Python 最小脚本**（RDK / RPi / Jetson / RK 同一份代码，只改总线号）：
+| Parameter | Value |
+|-----------|-------|
+| Hardware | PCA9685 16-channel PWM expander (common low-cost module, usually with a 5V LDO) |
+| Wiring | I2C SDA/SCL/VCC/GND + a separate V+ supply for the servos |
+| Default I2C address | **`0x40`** (A0–A5 jumpers change it; up to 62 boards chained) |
+| Frequency | `set_pwm_freq(50)` for standard servos; 1000 for LED dimming |
+| Resolution | 12-bit (0–4095) |
 
 ```bash
 sudo apt install python3-smbus2
-pip3 install adafruit-circuitpython-servokit   # 或裸 Adafruit_PCA9685
+pip3 install adafruit-circuitpython-servokit   # or raw Adafruit_PCA9685
 ```
 
 ```python
@@ -179,91 +194,80 @@ import board, busio
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import servo
 
-i2c = busio.I2C(board.SCL, board.SDA)          # 默认 i2c-1；RDK X5 按实际总线号换
+i2c = busio.I2C(board.SCL, board.SDA)          # default i2c-1; on RDK X5 use the actual bus number
 pca = PCA9685(i2c); pca.frequency = 50
 ch0 = servo.Servo(pca.channels[0], min_pulse=500, max_pulse=2500)
-ch0.angle = 90                                  # 90 度
+ch0.angle = 90
 ```
 
-**PCA9685 排障三步**：
-1. `i2cdetect -y <bus>` → 确认 `0x40` 出现；不出现 = 接线 / I2C 总线未使能
-2. 舵机抖动严重 = 供电不够（PCA9685 的 V+ 只带信号电平不带功率，**舵机电源必须走 PCA9685 的 V+ 螺丝端子，不从 40PIN 取**）
-3. 多舵机同时动卡顿 = 外部电源 5V/3A 不够，升到 5V/5A 或用航模 BEC
+**PCA9685 troubleshooting (3 steps):**
+1. `i2cdetect -y <bus>` → confirm `0x40` appears; missing = wiring / I2C bus not enabled.
+2. Heavy servo jitter = insufficient supply (PCA9685's V+ carries the load; **servo power must go to the V+ screw terminal, not the 40PIN rail**).
+3. Stutter when multiple servos move = external supply too weak; raise to 5V/5A or use an RC BEC.
 
-**总线舵机另一条路**（Dynamixel / Feetech STS / LX-16A）：
-- 走 **TTL 串口或 RS-485**，`/dev/ttyUSB0`（USB 转 TTL 最稳）
-- Python：`dynamixel-sdk` / `feetech-servo-sdk`
-- 优势：**一条线接几十个舵机**，每个有 ID，可读当前角度/电流/温度
-- 劣势：相对更贵，采购成本需按实时渠道确认
-- **RDK 场景**：双足/四足 / 机械臂用这种，SG90 等 PWM 舵机只适合玩具级
+**Bus servos** (Dynamixel / Feetech STS / LX-16A): TTL serial or RS-485 (`/dev/ttyUSB0` via USB-TTL is most reliable), `dynamixel-sdk` / `feetech-servo-sdk`. One wire chains dozens of ID-addressed servos that report angle/current/temperature. Use these for legged robots / arms; PWM servos like SG90 are toy-grade.
 
-### 26. 电机驱动三大范式
+---
 
-遇到"电机怎么转"时，**先问是哪种电机 + 用什么驱动器**，再落到板级：
+## Motors: the three driving paradigms
 
-**范式 1：直流电机（DC） = H 桥驱动器 + PWM 调速 + GPIO 控方向**
+Ask **which motor + which driver** first, then go to the board level.
 
-| 驱动器 | 适用 | 接线摘要 |
-|--------|------|----------|
-| **TB6612FNG** | 小车两轮，单路 ~1.2A | PWMA/PWMB 给 PWM，AIN1/AIN2/BIN1/BIN2 给方向（4 个 GPIO），STBY 置高 |
-| **DRV8833** | 更小电流（~1.5A 峰值）| 类似 TB6612 |
-| **BTS7960** | 大电流（43A）| R_EN/L_EN + RPWM/LPWM |
+**Paradigm 1: DC motor = H-bridge + PWM speed + GPIO direction**
 
-最小跑车代码（伪码，跨平台适用）：
+| Driver | For | Wiring summary |
+|--------|-----|----------------|
+| **TB6612FNG** | 2-wheel car, ~1.2A/ch | PWMA/PWMB for PWM, AIN1/AIN2/BIN1/BIN2 for direction (4 GPIO), STBY high |
+| **DRV8833** | smaller current (~1.5A peak) | similar to TB6612 |
+| **BTS7960** | high current (43A) | R_EN/L_EN + RPWM/LPWM |
+
 ```python
-# 一个轮子：GPIO17/18 定方向 + pwmchip0/pwm0 给速度
-gpio.set(17, 1); gpio.set(18, 0)    # 正转
-set_pwm_duty("pwmchip0/pwm0", 50)   # 50% 占空比
+# one wheel: GPIO17/18 set direction + pwmchip0/pwm0 set speed
+gpio.set(17, 1); gpio.set(18, 0)    # forward
+set_pwm_duty("pwmchip0/pwm0", 50)   # 50% duty
 ```
 
-**范式 2：步进电机 = 专用驱动器 + STEP/DIR 两根线**
+**Paradigm 2: stepper = dedicated driver + STEP/DIR (no PWM needed)**
 
-| 驱动器 | 特点 |
-|--------|------|
-| A4988 | 最便宜，1.5A，噪声大 |
-| DRV8825 | 2.2A，32 细分 |
-| **TMC2209** | 静音（重要！），UART 可配参数，3D 打印机主流 |
-
-接线仅需 2 个 GPIO（STEP + DIR）+ 3.3V EN，**不需要 PWM**（STEP 用软件打脉冲即可）：
+| Driver | Trait |
+|--------|-------|
+| A4988 | cheapest, 1.5A, noisy |
+| DRV8825 | 2.2A, 32 microsteps |
+| **TMC2209** | silent (important), UART-configurable, mainstream for 3D printers |
 
 ```python
-for _ in range(200):                  # 200 步 = 一圈（1.8°/步步进电机）
+for _ in range(200):                  # 200 steps = one revolution (1.8°/step)
     gpio.set(STEP, 1); time.sleep(0.001)
     gpio.set(STEP, 0); time.sleep(0.001)
 ```
 
-**范式 3：无刷（BLDC）= ESC 或智能驱动器**
+**Paradigm 3: BLDC = ESC or smart driver**
 
-| 方式 | 说明 |
-|------|------|
-| 航模 ESC | 跟舵机一样 50Hz PWM（1.0ms 停 ~ 2.0ms 全速），可直接复用 PCA9685 |
-| **ODrive / VESC** | 带编码器闭环、通过 UART/USB/CAN 下发命令，Python 有 `odrive` / `pyvesc` 库 |
-| D-Robotics S100 特殊路径 | MCU (R52+) 直接驱动，走 IPC；kHz 级回路，比 Linux RT 线程稳（见第 17 节）|
+| Approach | Note |
+|----------|------|
+| RC ESC | 50Hz PWM like a servo (1.0ms stop to 2.0ms full); can reuse PCA9685 |
+| **ODrive / VESC** | encoder closed-loop, commanded over UART/USB/CAN; `odrive` / `pyvesc` Python libs |
+| D-Robotics S100 path | MCU (R52+) drives directly over IPC; kHz-class loop, steadier than a Linux RT thread |
 
-> **Moss 对"机器人关节电机"类问题**：
-> - 玩具 / 教学 → 直流 + TB6612 或 PWM 舵机
-> - 桌面机械臂 / 四足 → **总线舵机（Feetech STS3215 / Dynamixel XL）**
-> - 双足 / 工业关节 → BLDC + ODrive/VESC 或厂商一体化关节模组
-> - 这不是 RDK 特殊性的问题，是**电机类别决定的行业标准**。
+> For "robot joint motor" questions: toy/teaching → DC + TB6612 or PWM servo; desktop arm / quadruped → **bus servos (Feetech STS3215 / Dynamixel XL)**; biped / industrial joint → BLDC + ODrive/VESC or a vendor integrated joint module. This is dictated by **motor class**, not anything RDK-specific.
 
-### 27. LED：从单色到 WS2812 灯带
+---
 
-**分三种，做法完全不同**：
+## LEDs: single-color to WS2812 strip
 
-| 类型 | 接法 | 控制方式 |
-|------|------|----------|
-| 单色 LED | 330Ω 限流电阻 + GPIO | GPIO 高低电平，`gpioset`；PWM 调亮度同舵机章节 |
-| **WS2812 / WS2815 RGB 灯带** | 5V + GND + DIN | **严格 800kHz 时序**，GPIO bitbang 不稳，**走 SPI MOSI 模拟** |
-| I2C LED 矩阵（HT16K33 / MAX7219）| I2C 4 线 | `luma.led_matrix` 跨平台 Python 库 |
+| Type | Wiring | Control |
+|------|--------|---------|
+| Single-color LED | 330Ω resistor + GPIO | GPIO level via `gpioset`; PWM dimming same as servos |
+| **WS2812 / WS2815 RGB strip** | 5V + GND + DIN | **strict 800kHz timing**, GPIO bitbang is unreliable → use SPI MOSI emulation |
+| I2C LED matrix (HT16K33 / MAX7219) | I2C 4 wires | `luma.led_matrix` cross-platform Python |
 
-**WS2812 跨平台通用方案 —— SPI 模拟时序**（RDK / RPi / Jetson / RK 都用这招）：
+**WS2812 cross-platform method — SPI emulation** (RPi / Jetson / RK / RDK all use this):
 
-核心技巧：**用 4 个 SPI bit 编码 1 个 WS2812 bit**
-- WS2812 的 "1" = 高电平 ~0.8µs + 低电平 ~0.45µs → SPI 输出 `1110`
-- WS2812 的 "0" = 高电平 ~0.4µs + 低电平 ~0.85µs → SPI 输出 `1000`
-- SPI 速率设 **2.4 MHz**（= 800kHz × 3；实验上 3.2MHz 也行）
+Encode 1 WS2812 bit with 4 SPI bits:
+- WS2812 "1" = ~0.8µs high + ~0.45µs low → SPI outputs `1110`
+- WS2812 "0" = ~0.4µs high + ~0.85µs low → SPI outputs `1000`
+- SPI rate = **2.4 MHz** (= 800kHz × 3; 3.2MHz also works in practice)
 
-跨平台 Python 包：
 ```bash
 pip3 install Adafruit-CircuitPython-NeoPixel-SPI
 ```
@@ -271,114 +275,107 @@ pip3 install Adafruit-CircuitPython-NeoPixel-SPI
 ```python
 import board, neopixel_spi
 pixels = neopixel_spi.NeoPixel_SPI(board.SPI(), 30, pixel_order=neopixel_spi.GRB)
-pixels[0] = (255, 0, 0)    # 第 0 颗红色
+pixels[0] = (255, 0, 0)    # pixel 0 red
 pixels.show()
 ```
 
-> **供电坑**：30 颗 WS2812 满亮白光 ≈ 1.8A，**绝对不能从 40PIN Pin 2/4 取 5V**，必须外接 5V 电源 + 共 GND；数据线 DIN 从 40PIN 的 MOSI 引脚出来即可（信号电流很小）。
+> **Power trap:** 30 WS2812 at full white ≈ 1.8A — **never from 40PIN Pin 2/4**; external 5V + common GND. The DIN data line off the 40PIN MOSI pin is fine (tiny signal current).
+> RPi's native `rpi_ws281x` needs root + the PWM0 pin (physical Pin 12 / GPIO18) and **only works on RPi** — on RDK / Jetson / RK use SPI emulation.
 
-**RPi 原生 `rpi_ws281x` 方案**：需要 root + PWM0 引脚（物理 Pin 12 / GPIO18），**该方案只适用于 RPi**，RDK / Jetson / RK **不适用**，一律走 SPI 模拟法。
+---
 
-### 28. 音频：ALSA 兜底链路（没装 TROS 时怎么播音 / 录音）
+## Audio: the ALSA fallback path
 
-> RDK 的 `hobot_audio` 只有装了 TROS 且插了官方麦克风阵列板时才可用。**当这些条件不具备**时，Moss 应该走标准 Linux ALSA 链路——这在 RPi / Jetson / RK / RDK 上**完全通用**。
+> RDK's `hobot_audio` is only available with TROS installed and the official mic-array board attached. **When those aren't present**, use the standard Linux ALSA path — identical on RPi / Jetson / RK / RDK.
 
-**音频硬件在不在 —— 3 步通用探测**：
-
+**Is the audio hardware there — 3-step probe:**
 ```bash
-# 1. 看声卡列表（输出设备 / 输入设备）
-aplay -l       # 列出所有输出设备：card X, device Y
-arecord -l     # 列出所有输入设备
-# 2. 一个都没有 = 内核根本没识别到
-lsusb          # 看 USB 声卡 / USB 麦克风有没有
+aplay -l       # output devices: card X, device Y
+arecord -l     # input devices
+lsusb          # USB sound card / mic present?
 dmesg | grep -i "audio\|sound\|snd"
-# 3. 有声卡但播不响 = 音量被静音 / 选错 channel
-alsamixer      # 图形化调音量，按 M 解静音（MM 标红 = 静音）
+alsamixer      # raise volume, press M to unmute (MM in red = muted)
 ```
 
-**播放 WAV / MP3**：
-
+**Play WAV / MP3:**
 ```bash
-aplay test.wav                              # 播 WAV，用默认声卡
-aplay -D plughw:1,0 test.wav                # 指定 card 1 device 0
-aplay -D plughw:CARD=UAC1,DEV=0 test.wav    # 按 USB 声卡名字指定
-
-# MP3 / Opus 要先解码
+aplay test.wav
+aplay -D plughw:1,0 test.wav                # card 1 device 0
+aplay -D plughw:CARD=UAC1,DEV=0 test.wav    # by USB card name
 sudo apt install mpg123 sox
 mpg123 song.mp3
-sox song.mp3 -d                             # 自动播放任意格式
+sox song.mp3 -d                             # auto-play any format
 ```
 
-**录音**：
-
+**Record:**
 ```bash
-arecord -D plughw:1,0 -f S16_LE -r 16000 -c 1 -d 5 test.wav   # 5 秒 16kHz 单声道
-# 验证麦克风工作（实时看电平）
-arecord -vv -f S16_LE -r 16000 -c 1 /dev/null
+arecord -D plughw:1,0 -f S16_LE -r 16000 -c 1 -d 5 test.wav   # 5s 16kHz mono
+arecord -vv -f S16_LE -r 16000 -c 1 /dev/null                # live level meter
 ```
 
-**PulseAudio / PipeWire 场景**：
+**PulseAudio / PipeWire:**
 ```bash
-pactl list short sinks                      # 列出播放设备
-pactl list short sources                    # 列出录音设备
-paplay test.wav                             # 通过 PulseAudio 播放
-parecord -d 5 test.wav                      # 录音
+pactl list short sinks
+pactl list short sources
+paplay test.wav
+parecord -d 5 test.wav
 ```
 
-**USB 声卡 = 万能兜底**：不管哪块板，插 **USB 声卡（带 3.5mm）或 USB 麦克风**，内核自动加载 `snd-usb-audio`，`aplay -l` 立刻可见。**Jetson 无板载音频，这是唯一推荐路径**；RDK 没有 I2S HAT 时也推这条。
+> **USB sound card = universal fallback:** on any board, plug in a USB sound card (with 3.5mm) or USB mic; the kernel auto-loads `snd-usb-audio` and `aplay -l` shows it immediately. On Jetson (no on-board audio) this is the only recommended path; on RDK without an I2S HAT, also use this.
 
-**典型错误 → 判断**：
+**Common errors → diagnosis:**
 
-| 报错 / 现象 | 判断 |
-|-------------|------|
-| `aplay -l` 返回 "no soundcards found" | 硬件未识别，先看 USB 声卡是否插好 / I2S 是否 overlay |
-| `ALSA lib pcm.c ... unable to open slave` | 设备被占用，`sudo fuser /dev/snd/*` 看是谁，或 `systemctl stop pulseaudio` 临时释放 |
-| 播放有声但极小 / 失真 | `alsamixer` 加音量；或 `amixer sset Master 80%` |
-| 麦克风录音全是噪声 | `arecord -l` 确认选对设备，避开板载底噪；USB 麦克风质量更稳 |
-| `aplay: Dac failed: Device or resource busy` | 其他进程（PulseAudio / TROS）持有 → `pactl suspend-sink 0` 或切用 PulseAudio API |
+| Error / symptom | Diagnosis |
+|-----------------|-----------|
+| `aplay -l` → "no soundcards found" | hardware not detected — check USB card / I2S overlay |
+| `ALSA lib pcm.c ... unable to open slave` | device busy — `sudo fuser /dev/snd/*`, or `systemctl stop pulseaudio` to release |
+| Sound plays but very faint / distorted | `alsamixer` raise volume; or `amixer sset Master 80%` |
+| Mic recording is all noise | `arecord -l` to select the right device; a USB mic is steadier than board-noise input |
+| `aplay: Dac failed: Device or resource busy` | another process (PulseAudio / TROS) holds it → `pactl suspend-sink 0` or use the PulseAudio API |
 
-### 29. 零驱动诊断 SOP（9 步通用外设探测流程）
+---
 
-> 用户说 "我插了个 XXX 但不知道怎么用 / 板子不识别 / 没驱动"——**不要猜，按下面 9 步走**。这套流程在 RDK / RPi / Jetson / RK 上 **100% 通用**，不依赖厂商工具。
+## Zero-driver diagnosis SOP
+
+> When the user says "I plugged in X, don't know how to use it / board doesn't recognize it / no driver" — don't guess, walk the 9 steps. 100% portable across RDK / RPi / Jetson / RK, no vendor tools needed.
 
 ```
-┌─ Step 1. dmesg | tail -50                  内核最近识别了什么（插拔时看这里）
-├─ Step 2. lsusb                              USB 设备枚举（USB 声卡/麦/摄像头/转 TTL）
-├─ Step 3. ls /dev/                           设备节点全览：
-│          /dev/tty*       串口类（ttyUSB0 / ttyACM0 / ttyS* / ttyHS*）
-│          /dev/video*     V4L2 摄像头
-│          /dev/i2c-*      I2C 总线
-│          /dev/spidev*    SPI
-│          /dev/snd/       音频（card0 / pcmC0D0p 等）
-│          /dev/input/     输入（按键 / 游戏手柄）
-├─ Step 4. i2cdetect -l 列所有 I2C 总线，再 i2cdetect -y <bus> 扫地址
-├─ Step 5. v4l2-ctl --list-devices            摄像头
-├─ Step 6. aplay -l / arecord -l              音频
-├─ Step 7. lsmod | grep <keyword>             内核模块是否加载
-├─ Step 8. modinfo <mod> / modprobe <mod>     查模块信息 / 手动加载
-└─ Step 9. cat /proc/device-tree/…            设备树节点（RPi/RK/RDK 都有）
+Step 1. dmesg | tail -50              what the kernel just recognized (watch on plug/unplug)
+Step 2. lsusb                          USB enumeration (sound card / mic / camera / USB-TTL)
+Step 3. ls /dev/                       device nodes:
+        /dev/tty*       serial (ttyUSB0 / ttyACM0 / ttyS* / ttyHS*)
+        /dev/video*     V4L2 cameras
+        /dev/i2c-*      I2C buses
+        /dev/spidev*    SPI
+        /dev/snd/       audio (card0 / pcmC0D0p)
+        /dev/input/     input (buttons / gamepads)
+Step 4. i2cdetect -l  then  i2cdetect -y <bus>     list buses, scan addresses
+Step 5. v4l2-ctl --list-devices        cameras
+Step 6. aplay -l / arecord -l          audio
+Step 7. lsmod | grep <keyword>         is the kernel module loaded
+Step 8. modinfo <mod> / modprobe <mod> module info / manual load
+Step 9. cat /proc/device-tree/…        device-tree nodes (RPi/RK/RDK all have these)
 ```
 
-**按"症状 → 诊断"对表**：
+**Symptom → diagnosis:**
 
-| 症状 | 优先查 | 常见原因 |
-|------|-------|----------|
-| 设备插上板子不识别 | Step 1 (dmesg) + Step 2 (lsusb) | 供电不够 / USB 口坏 / USB 3.0 兼容性 |
-| "No such device" 打开 /dev/i2c-X | Step 3 + Step 4 | I2C 总线未使能 / Pinmux 未切（RDK 特有）|
-| `permission denied: /dev/ttyUSB0` | `ls -l /dev/ttyUSB0` | 用户没在 `dialout` 组 → `sudo usermod -aG dialout $USER` |
-| `ALSA lib ... unable to open slave` | Step 6 + `fuser` | 设备被其他进程占用 |
-| PWM 没反应 | `ls /sys/class/pwm/` | Pinmux 未切 / 板子 PWM 路数超了 |
-| Python 导入 `Hobot.GPIO` 报错 | `which python3` | 用了 conda/venv，`Hobot.GPIO` 只认系统 Python |
+| Symptom | Check first | Common cause |
+|---------|-------------|--------------|
+| Device plugged in, board doesn't recognize | Step 1 (dmesg) + Step 2 (lsusb) | insufficient power / bad USB port / USB 3.0 compatibility |
+| "No such device" on `/dev/i2c-X` | Step 3 + Step 4 | I2C bus not enabled / pinmux not switched (RDK-specific) |
+| `permission denied: /dev/ttyUSB0` | `ls -l /dev/ttyUSB0` | user not in `dialout` → `sudo usermod -aG dialout $USER` |
+| `ALSA lib ... unable to open slave` | Step 6 + `fuser` | device held by another process |
+| PWM no response | `ls /sys/class/pwm/` | pinmux not switched / out of PWM channels |
+| `import Hobot.GPIO` fails | `which python3` | running conda/venv — `Hobot.GPIO` is system-Python only |
 
-**修复的三条正交路径**（按风险从低到高）：
+**Three orthogonal fix paths (low → high risk):**
+1. **User-space packages (safest):** `apt install` / `pip install` / `git clone + colcon build`.
+2. **Temporary kernel module (medium):** `modprobe <mod>` / `insmod ./xxx.ko` / `rmmod <mod>` for the current session only, then check `dmesg`.
+3. **Persistent kernel/boot chain (highest, destructive):** `/etc/modules-load.d/*.conf`, `/boot` device tree, `/lib/modules`, initramfs / miniboot / bootloader / MCU firmware — **on RDK, don't advise users to touch these unless absolutely necessary**; reserve for official flows and manual recovery.
 
-1. **用户态装包**（最安全）：`apt install` / `pip install` / `git clone + colcon build`
-2. **临时加载内核模块**（中等）：`modprobe <mod>` / `insmod ./xxx.ko` / `rmmod <mod>`，只做当前会话验证，随后看 `dmesg`
-3. **持久化内核/启动链**（最高风险，破坏性）：`/etc/modules-load.d/*.conf` 开机加载、`/boot` 设备树、`/lib/modules` 安装、initramfs / miniboot / bootloader / MCU 固件——**RDK 上不到万不得已不建议用户碰**，保留给官方流程和人工恢复方案
-
-**Moss 的应答模板**（遇到外设问题时）：
-1. 先问清 **板型 + 接口（USB / 40PIN I2C / 40PIN UART / MIPI）+ 设备型号**
-2. 跑 Step 1–3 的三条命令，让用户贴回输出
-3. 根据输出走"症状 → 诊断"表，定位到具体一条
-4. 给出**最小可验证命令**（`i2cdetect -y 1` 看到 0x40 / `aplay -l` 看到 card 1 / `gpioinfo gpiochip0`）
-5. 成功验证后再谈"写成 ROS2 节点 / 封装 Python 脚本 / 开机自启"
+**Answer template (peripheral issues):**
+1. Ask for **board model + interface (USB / 40PIN I2C / 40PIN UART / MIPI) + device model**.
+2. Have the user run Steps 1–3 and paste back.
+3. Walk the symptom→diagnosis table to one specific cause.
+4. Give the **smallest verifiable command** (`i2cdetect -y 1` shows 0x40 / `aplay -l` shows card 1 / `gpioinfo gpiochip0`).
+5. Only after that, discuss "wrap as a ROS2 node / Python script / autostart".

@@ -1,68 +1,115 @@
 ---
 name: rdk-source-map
-description: 当用户在 D-Robotics GitHub 组织(约 226 个公开仓,组织共约 327 含私有)里需要定位/区分仓库时使用——看到某个仓不知道它是干嘛的/属于哪一层/对应哪块板、想知道"做某任务该去哪个仓"、分不清 hobot-(连字符)与 hobot_(下划线)、或要从源码构建 RDK OS 镜像/定制内核 BSP(repo/manifest/rdk-gen/vcstool 流程)。本 skill 是"仓库地图与源码导航";官方文档站章节定位走 rdk-doc-finder,板上跑现成模型走 rdk-model-zoo,ROS 节点用法走 rdk-ros,具身/LLM 落地走 rdk-embodied-lerobot / rdk-llm-deployment。
+description: Map and disambiguate repositories in the D-Robotics GitHub org (226 public / 327 total incl. private) — tell the user what a repo is, which layer it belongs to, which board it targets, which repo to use for a task, and how to build an RDK OS image or TROS workspace from source. Use whenever the user sees a D-Robotics repo and doesn't know what it does, can't tell hobot- (hyphen, BSP) from hobot_ (underscore, ROS2 app), asks "which repo do I clone for X", or wants the repo/manifest/rdk-gen/vcstool source-build flow. 触发词:这个仓库是干嘛的、属于哪一层、对应哪块板、该 clone 哪个仓、hobot- 和 hobot_ 区别、连字符 下划线、rdk-gen、manifest、repo sync、vcstool、ros2.repos、从源码构建镜像、定制内核、编译 TROS、x5-rdk-gen、s100-rdk-gen。Routing — finding a doc-site chapter → rdk-doc-finder; running a ready-made model on-board → rdk-model-zoo; ROS node usage → rdk-ros; embodied/LLM deployment → rdk-embodied-lerobot / rdk-llm-deployment.
 ---
 
-# D-Robotics GitHub 组织仓库地图
+# D-Robotics GitHub Org Repo Map
 
-> 来源:基于 [github.com/D-Robotics](https://github.com/D-Robotics) 组织 327+ 仓库元数据与代表性 README([rdk-gen](https://github.com/D-Robotics/rdk-gen)、[manifest](https://github.com/D-Robotics/manifest)、[robot_dev_config](https://github.com/D-Robotics/robot_dev_config)、[hobot_dnn](https://github.com/D-Robotics/hobot_dnn) 等)实地核对归纳,逐条保留出处;清单随组织演进,以当前仓库为准。
+Help a user who is staring at the [D-Robotics org](https://github.com/D-Robotics) (226 public repos, 327 total including private) and cannot tell which repo is which. This skill answers four questions: **what is this repo, what layer/board does it belong to, which repo should I use for my task, and how do I build an image/workspace from source.** The single most important rule: **`hobot-` (hyphen) and `hobot_` (underscore) are two different systems** — get that wrong and every downstream answer is wrong.
 
-## 何时用
+> Sources: live `gh api orgs/D-Robotics/repos` metadata (verified 2026-06, 226 public / 327 total) plus the READMEs of [rdk-gen](https://github.com/D-Robotics/rdk-gen), [manifest](https://github.com/D-Robotics/manifest), and [robot_dev_config](https://github.com/D-Robotics/robot_dev_config). Repo counts drift as the org evolves — re-run `gh api` to confirm before quoting an exact number.
 
-用户面对 D-Robotics 一大堆相似命名的仓库**不知道哪个是哪个 / 该去哪个**时用本 skill 快速定位。它回答"这仓是什么、属于哪层、对应哪块板、我的任务该看哪个仓、怎么从源码构建镜像"。
+## The one distinction that matters most: hyphen vs underscore
 
-## 三条正交的轴(看懂就能区分任意一个仓)
+Verified by name across all public repos (2026-06): ~20 `hobot-*` (hyphen) vs ~38 `hobot_*` (underscore). They are NOT stylistic variants of the same thing. (Counts drift — `gh api orgs/D-Robotics/repos --paginate --jq '.[].name' | grep -c '^hobot-'` to recount.)
 
-1. **层级**:BSP/系统 → TROS/ROS2 中间件 → 应用/AI → 产品/文档。
-2. **板型**:用前缀切分——**无前缀 = RDK X3** / `x5-` = X5 / `s100-` = S100·S100P / `j5-` = J5(征程5 车载)。(RDK S600 是 S 系列新板,系统 Ubuntu 24.04/Jazzy,BSP 暂未以 `s600-` 前缀开源,见 references。)
-3. **装配方式**:`hobot-`(连字符)与 `hobot_`(下划线)是两套体系(见下,最高频混淆点)。
-
-## 最高频区分:连字符 vs 下划线
-
-| | `hobot-xxx`(**连字符**) | `hobot_xxx`(**下划线**) |
+| | `hobot-xxx` (**hyphen**) | `hobot_xxx` (**underscore**) |
 | --- | --- | --- |
-| 层级 | BSP / 系统源码(进 OS 镜像) | TROS / ROS2 **应用功能包** |
-| 例 | `hobot-boot`/`hobot-camera`/`hobot-multimedia`/`hobot-bpu-drivers`/`hobot-dnn`(底层库) | `hobot_dnn`(dnn_node)/`hobot_stereonet`/`hobot_usb_cam`/`hobot_llamacpp` |
-| 怎么装配 | `repo` + `manifest` + `*-rdk-gen` → **系统镜像** | `vcstool` + `robot_dev_config/ros2.repos` → **TROS 工作区** |
-| 语言 | C / Shell / 配置 | C++ / Python(ROS 包) |
+| Layer | BSP / system source (goes into the OS image) | TROS / ROS2 **application package** |
+| Examples | `hobot-boot`, `hobot-camera`, `hobot-multimedia`, `hobot-bpu-drivers`, `hobot-dnn` (low-level lib) | `hobot_dnn` (dnn_node), `hobot_stereonet`, `hobot_usb_cam`, `hobot_llamacpp` |
+| Assembled by | `repo` + `manifest` + `*-rdk-gen` → **system image** | `vcstool` + `robot_dev_config/ros2.repos` → **TROS workspace** |
+| Language | C / Shell / config | C++ / Python (ROS packages) |
 
-> 同名跨层典型:`hobot-dnn`(连字符,镜像里的 BPU 推理底层库)被 `hobot_dnn`(下划线,封装它的 ROS2 `dnn_node` 包)调用。**上层 ROS 节点 → 下层 BSP 库**。
+> **Same name across layers:** `hobot-dnn` (hyphen — the low-level BPU inference library inside the image) is wrapped by `hobot_dnn` (underscore — the ROS2 `dnn_node` package). The rule of thumb: **upper ROS node (underscore) → lower BSP library (hyphen).** When a user says "hobot_dnn vs hobot-dnn," this is the answer.
 
-## 板型前缀:同一 BSP 组件每块板各一份
+## Three orthogonal axes (apply all three to classify any repo)
 
-`hobot-multimedia`(X3)/ `x5-hobot-multimedia`(X5)/ `s100-hobot-multimedia`(S100)是**同一个组件按 SoC 维护的三份**;`camera`/`dnn`/`boot`/`dtb`/`wifi`/`io`/`utils`/`display` 等都如此。这是 Android/Yocto 式按芯片切分的 BSP 多仓结构。
+1. **Layer**: BSP/system → TROS/ROS2 middleware → application/AI → product/docs.
+2. **Board prefix**: see the table below. The bare (no-prefix) `hobot-*`/`rdk-gen`/`manifest` set targets **RDK X3**; `x5-` targets X5.
+3. **Assembly system**: `hobot-` (hyphen, image) vs `hobot_` (underscore, TROS) — the section above.
 
-## 两套"多仓装配"系统(理解全组织的钥匙)
+### Board-prefix decision table
+
+| Prefix | Board | BSP/build repos public? |
+| --- | --- | --- |
+| *(none)* | RDK X3 | ✅ public (`rdk-gen`, `manifest`, `kernel`, `uboot`, `bootloader`, `hobot-*`) |
+| `x5-` | RDK X5 | ✅ public (`x5-rdk-gen`, `x5-manifest`, `x5-kernel`, `x5-hobot-*`) |
+| `s100-` | RDK S100 / S100P | ⚠️ **private** (`s100-rdk-gen`, `s100-bootloader`, `s100-hobot-*` exist but are not publicly browsable; there is no `s100-manifest`) |
+| `j5-` | Journey 5 (征程5, automotive SoC) | ⚠️ **private** (`j5-rdk-gen`, `j5-manifest`, `j5-kernel-5.10`) |
+| *(no `s600-` prefix)* | RDK S600 | ❌ **no `s600-` BSP repos exist** (public or private); only app-layer repos carry S600 support |
+
+**Do not tell a user to clone `s100-rdk-gen` or `j5-manifest` as if it were public** — those prefixed BSP/build repos are private. The board-prefix → board mapping is real and useful for *classifying* a name, but availability differs.
+
+### Same BSP component, one copy per SoC
+
+`hobot-multimedia` (X3) / `x5-hobot-multimedia` (X5) / `s100-hobot-multimedia` (S100) are **the same component maintained as three SoC-specific copies**. The same holds for `camera` / `dnn` / `boot` / `dtb` / `wifi` / `io` / `utils` / `display` / `spdev` / `configs` / `audio-config`. This is the Android/Yocto-style per-chip multi-repo BSP layout.
+
+## Two "multi-repo assembly" systems (the key to the whole org)
 
 ```
-OS 镜像构建                              TROS 应用构建
-  repo + manifest                         vcstool + ros2.repos
-  入口 rdk-gen / x5-rdk-gen / s100-rdk-gen 入口 robot_dev_config
-  拉 kernel/uboot/bootloader/hobot-*(连字符) 拉 hobot_*(下划线) + rcl/rclcpp/rmw…
-  → 可烧录 RDK OS 镜像(*.img)            → /opt/tros 工作区 + deb 包
-  底层、板型强相关                        上层、跨板型(靠 BSP 提供能力)
+OS IMAGE BUILD                              TROS APP BUILD
+  repo + manifest                             vcstool + ros2.repos
+  entry: rdk-gen / x5-rdk-gen                 entry: robot_dev_config
+  pulls kernel/uboot/bootloader/hobot-*       pulls hobot_* (underscore)
+        (hyphen)                                    + rcl/rclcpp/rmw…
+  → flashable RDK OS image (*.img)            → /opt/tros workspace + deb packages
+  low-level, board-specific                   upper-level, cross-board (relies on BSP)
 ```
 
-从源码构建镜像 / 定制内核 / TROS 从源码编译的**具体命令**见 [os-image-build](references/os-image-build.md)。
+Both flows, with exact commands, are in [os-image-build.md](references/os-image-build.md). **Most users never need either** — they flash an official image and `apt install` TROS. Only reach for source-build when customizing the image, kernel, device tree, a new sensor, or compiling all of TROS from source.
 
-## 任务 → 去哪个仓(速查)
+## Workflow — classify an unknown repo
 
-| 想做的事 | 去哪个仓库家族 |
+1. **Check the suffix/prefix first** (cheapest signal): `*_doc`/`*-doc` → docs; `nodehub_*` → NodeHub deb packaging; `tros_*` → TROS tooling/orchestration; `magicbox_*` → MagicBox product; `rcl`/`rclcpp`/`rmw_*`/`rosbag2`/`vision_opencv`/`isaac_*` → upstream ROS2 port (NOT RDK-original).
+2. **Check hyphen vs underscore** if it contains `hobot`: hyphen → BSP/image; underscore → ROS2 app package.
+3. **Check the board prefix**: none → X3, `x5-` → X5, `s100-` → S100/S100P (private), `j5-` → Journey 5 (private).
+4. **If still unsure, look it up** — `gh api repos/D-Robotics/<name> --jq '{lang:.language, desc:.description}'`, or run `scripts/classify_repo.py <name>` for a deterministic axis breakdown.
+5. **Route to the task-family table** (below) for "which repo do I use."
+
+## Task → which repo family (quick lookup)
+
+| I want to… | Go to this repo family |
 | --- | --- |
-| 拿现成 BPU 模型直接跑 | `rdk_model_zoo`(X5)/ `rdk_model_zoo_s`(S) → 也见 skill `rdk-model-zoo` |
-| 用某个视觉/感知 ROS 节点(检测/双目/SLAM/标定) | `hobot_*` 下划线 + `mono*/stereo*/face_*/hand_*/parking_*` |
-| 端侧 LLM/VLM/语音 | `hobot_llamacpp`/`hobot_llm`/`sensevoice_ros2`/`hobot_tts`/`xiaozhi-in-rdk` → skill `rdk-llm-deployment` |
-| 具身/机械臂/LeRobot/VLA | `rdk_LeRobot_tools`/`lerobot`/`openpi*`/`RoboTwin` → skill `rdk-embodied-lerobot` |
-| **从源码构建/定制 OS 镜像、改内核驱动、加 sensor** | `*-rdk-gen` + `*-manifest` + `kernel`/`uboot`/`bootloader` + `hobot-*`(连字符) |
-| TROS 从源码编译整套 | `robot_dev_config`(入口)+ `tros_*` |
-| 把 TROS 应用打成 deb 上架应用中心 | `nodehub_*`(NodeHub 打包,README 多只引 TROS 文档) |
-| 查官方文档源码 | `rdk_doc`(主)/ `rdk_s_doc` / `tros_doc` / `model_zoo_doc` 等 `*_doc` |
+| Run a ready-made BPU model | `rdk_model_zoo` (X3/X5 branches) / `rdk_model_zoo_s` (S, default branch `s100`) → skill `rdk-model-zoo` |
+| Use a vision/perception ROS node (detect/stereo/SLAM/calib) | `hobot_*` underscore + `mono*/stereo*/face_*/hand_*` → skill `rdk-ros` |
+| On-device LLM/VLM/speech | `hobot_llamacpp`/`hobot_llm`/`hobot_xlm`/`hobot_tts`/`hobot_audio` → skill `rdk-llm-deployment` |
+| Embodied / arm / LeRobot / VLA | `rdk_LeRobot_tools`/`lerobot`/`openpi*`/`RoboTwin` → skill `rdk-embodied-lerobot` |
+| **Build/customize an OS image, kernel, driver, add a sensor** | `*-rdk-gen` + `*-manifest` + `kernel`/`uboot`/`bootloader` + `hobot-*` (hyphen) |
+| Compile all of TROS from source | `robot_dev_config` (entry) + `tros_*` |
+| Package a TROS app into a deb for the app center | `nodehub_*` (READMEs mostly reference TROS docs) |
+| Read official doc source | `rdk_doc` (main, 16★) / `rdk_x_doc` / `rdk_s_doc` / `tros_doc` / `model_zoo_doc` → skill `rdk-doc-finder` |
 
-完整 12 类家族地图、识别速查表与代表仓清单见 [repo-families](references/repo-families.md)。
+The full 12-family map with representative repo lists is in [repo-families.md](references/repo-families.md).
 
-## 识别速查(一眼认出)
+## Worked examples
 
-- `*_doc` 后缀 → 文档仓;`nodehub_*` → NodeHub 打包;`tros_*` → TROS 工具/编排;`magicbox_*` → MagicBox 产品。
-- `rcl`/`rclcpp`/`rmw_*`/`rosbag2`/`vision_opencv`/`isaac_*` → ROS2 上游移植,非 RDK 原创。
-- 板型前缀 + 连字符 + `kernel`/`boot`/`manifest` → BSP/镜像层。
-- 下划线 + 算法/外设名 → ROS2 应用层。
+**Example 1 — "`hobot-dnn` 和 `hobot_dnn` 有什么区别?哪个是我要的?"**
+They are different layers. `hobot-dnn` (hyphen) is the low-level BPU inference **library** that goes into the OS image (BSP). `hobot_dnn` (underscore) is the ROS2 **package** (`dnn_node`) that wraps it for use as a node. If you're writing a ROS2 perception node, you want the underscore one; if you're rebuilding the system image or debugging the BPU library, the hyphen one. Rule: upper ROS node (underscore) → lower BSP lib (hyphen).
+
+**Example 2 — "我想从源码构建 S100 的系统镜像,该 clone `s100-rdk-gen` 吗?"**
+The `s100-rdk-gen` / `s100-bootloader` / `s100-hobot-*` repos **exist but are private** — you can't clone them anonymously. Public source-build is available for X3 (`rdk-gen` + `manifest`) and X5 (`x5-rdk-gen` + `x5-manifest`); the flow is `repo init -u …/manifest.git -b main` → `repo sync` → `./pack_image.sh`. For S100 image building, use the official prebuilt image instead, or request access. See [os-image-build.md](references/os-image-build.md).
+
+**Example 3 — "组织里 `rcl`、`rclcpp`、`rmw_cyclonedds` 这些是 RDK 自己写的吗?"**
+No. Those are **upstream ROS2 repos ported/mirrored** into the org for the TROS cross-compile (pulled by `vcstool` via `ros2.repos`), not RDK-original algorithms. When one of them misbehaves, check upstream ROS2 behavior first before assuming an RDK change. Same for `rosbag2`/`vision_opencv`/`isaac_*`.
+
+**Example 4 — "我要跑一个现成的 YOLO,该去哪个仓?S 系列的板呢?"**
+Don't clone a BSP repo. For ready-made models use `rdk_model_zoo` (pick the branch matching your board — `rdk_x3`, `rdk_x5`, or a `s600` feature branch) and for S-series use `rdk_model_zoo_s` (default branch `s100`). Then hand off to skill `rdk-model-zoo` for the actual run-on-board steps. The `nodehub-x5-rdkmodelzoo-samples` repo packages some of these as installable NodeHub apps.
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+| --- | --- |
+| Treat `hobot-dnn` and `hobot_dnn` as the same repo | Hyphen = BSP image lib; underscore = ROS2 package |
+| Tell the user to clone `s100-rdk-gen` / `j5-manifest` | Those BSP/build repos are private; only X3 & X5 source-build is public |
+| Invent an `s600-` prefix or `s600-rdk-gen` repo | No `s600-` BSP repos exist; S600 support lives in app-layer repos only |
+| Assume `rcl`/`rclcpp`/`isaac_*` are RDK-original | They are upstream ROS2 ports; debug against upstream first |
+| Quote an exact repo count as fixed | Counts drift — re-run `gh api orgs/D-Robotics/repos` to confirm |
+| Send a "run a model" user into a BSP/manifest repo | Route to `rdk_model_zoo` / skill `rdk-model-zoo` |
+
+## Reference map
+
+| Read this | When |
+| --- | --- |
+| [repo-families.md](references/repo-families.md) | Need the full 12-family classification, the naming-convention cheat table, or a representative repo list for a family |
+| [os-image-build.md](references/os-image-build.md) | User wants the actual source-build commands — `repo`/`manifest`/`*-rdk-gen` for the OS image, or `vcstool`/`robot_dev_config` for TROS |
+| `scripts/classify_repo.py` | Deterministic axis breakdown for a single repo name (layer / board / assembly system) without reciting from memory |

@@ -51,7 +51,8 @@ for (const dir of readdirSync(SKILLS)) {
 
   // 校验正文中 references/ 链接存在
   for (const lnk of text.matchAll(/\]\((references\/[^)]+)\)/g)) {
-    const refPath = join(skillDir, lnk[1]);
+    const target = lnk[1].split('#')[0];          // strip #anchor fragment (TOC/section links)
+    const refPath = join(skillDir, target);
     if (!existsSync(refPath)) fail(dir, `引用的文件不存在: ${lnk[1]}`);
   }
 }

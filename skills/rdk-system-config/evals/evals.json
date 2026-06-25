@@ -1,0 +1,66 @@
+{
+  "skill_name": "rdk-system-config",
+  "description": "Test prompts that verify rdk-system-config triggers and produces correct, board-family-aware configuration guidance. Prompts are written the way a real RDK user would phrase them (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "s600-lock-cpu-max-freq",
+      "prompt": "S600 上怎么把 CPU 锁到最高频，一直跑在最大频率？",
+      "expected_output": "Lock via userspace governor + scaling_setspeed at 2100000 kHz; note S-series has no overclock and the setting resets on reboot.",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "Gives S600 max frequency 2100000 kHz (2.1 GHz) as the ceiling." },
+        { "id": "1b", "text": "Uses userspace governor then writes scaling_setspeed (echo userspace > .../cpu0/cpufreq/scaling_governor, then echo 2100000 > .../policy0/scaling_setspeed)." },
+        { "id": "1c", "text": "States S-series has no boost/overclock, OR that the setting resets on reboot (persist via self-start)." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "s100-fix-fan-speed",
+      "prompt": "S100 风扇老是变速，我想把风扇固定在最高档，怎么设置？",
+      "expected_output": "Set thermal_zone0 policy to user_space first, then echo 10 to cooling_device2/cur_state; warns step_wise overrides manual level.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "Says the S100 fan is cooling_device2, bound to thermal_zone0." },
+        { "id": "2b", "text": "Sets the zone policy to user_space FIRST (echo user_space > .../thermal_zone0/policy) before writing cur_state." },
+        { "id": "2c", "text": "Writes the fan level via echo <0-10> > /sys/class/thermal/cooling_device2/cur_state and warns step_wise would override a manual value." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "s600-static-ip-cli",
+      "prompt": "刚拿到 S600，想用命令行给有线网口配个静态 IP，怎么弄？",
+      "expected_output": "nmcli connection modify ipv4.method manual + addresses/gateway/dns, then down/up; no ifup/ifdown on S-series.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Uses nmcli connection modify with ipv4.method manual and ipv4.addresses/gateway, then nmcli connection down/up to apply." },
+        { "id": "3b", "text": "States S-series (Ubuntu 24.04) does NOT support ifup/ifdown / editing /etc/network/interfaces." },
+        { "id": "3c", "text": "Mentions the eth1 management port is fixed at 192.168.127.10, OR cautions not to lock yourself off the connected port." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "x5-config-txt-bus-toggle",
+      "prompt": "X5 想通过 config.txt 关掉 uart3、打开 i2c5，怎么写？",
+      "expected_output": "dtparam=uart3=off and dtparam=i2c5=on in /boot/config.txt (edit as root, reboot); mind X5 pin multiplexing; S-series uses fdt-enable instead.",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "Gives dtparam=uart3=off and dtparam=i2c5=on in /boot/config.txt (edit as root, reboot to apply)." },
+        { "id": "4b", "text": "Warns about X5 pin multiplexing (a row shares pins, only one function active; e.g. uart3 vs i2c5, spi2 vs pwm)." },
+        { "id": "4c", "text": "Does NOT claim S-series uses dtparam; if S is mentioned, says S uses fdt-enable/fdt-disable instead." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "s-series-no-soft-ap",
+      "prompt": "S100 能不能开个 WiFi 热点（Soft AP）让别的设备连？",
+      "expected_output": "S-series Soft AP is documented as not yet available; do not hand a hostapd recipe; offer Station/wired alternatives.",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "States that on S-series, Wi-Fi Soft AP mode is not yet available per the official doc." },
+        { "id": "5b", "text": "Does NOT provide an S-series hostapd / isc-dhcp-server AP setup as if it works." },
+        { "id": "5c", "text": "Optionally notes that Soft AP (incl. X5 5G) is an X-series capability, or suggests Station mode / wired as alternatives." }
+      ]
+    }
+  ]
+}

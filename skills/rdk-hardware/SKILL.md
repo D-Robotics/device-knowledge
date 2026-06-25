@@ -1,54 +1,105 @@
 ---
 name: rdk-hardware
-description: 当用户问 RDK 板子的硬件事实——各板引脚是否相同/40PIN 怎么接、默认用户名密码、模型目录在哪、摄像头/CAN/网口等接口、各板算力内存差异、要不要散热、系统路径与 OS 版本线时使用。本 skill 给硬件子系统的事实底座:要排报错故障→rdk-board-knowledge;要动手驱动外设(点灯/转电机)→rdk-peripheral-cookbook;要端到端部署模型→rdk-device;要选型买哪块板→rdk-ecosystem。
+description: The hardware-facts base for RDK boards — the 6-board spec table (X3 / X5 / Ultra / S100 / S100P / S600) plus 40PIN/GPIO, buses (I2C/SPI/UART/PWM), power & LED meaning, display, network/IP, and CAN. Use WHENEVER a question is about a board hardware fact: are the pins the same across boards, how the 40PIN is wired, IO voltage, default username/password, model dir location, which interfaces exist, TOPS/RAM differences, cooling, OS-version line, or system paths. Answer from here — do not guess from memory, the per-board numbers really do differ. 触发词:各板引脚一样吗、40PIN怎么接、IO电平、1.8V还是3.3V、默认用户名密码、root/sunrise、模型目录在哪、有没有CAN口、ip link can0、网口默认IP、192.168.127.10、连不上板子、算力多少TOPS、内存多大、要不要散热、供电几V、电源灯什么颜色、HDMI分辨率、Ubuntu几、TROS路径、板型怎么查。Routing — error-code / boot-failure → rdk-board-knowledge; driving a peripheral (blink LED, spin motor, read I2C, send CAN frames) → rdk-peripheral-cookbook; model deploy / toolchain / camera bringup → rdk-device; which board to buy → rdk-ecosystem.
 ---
 
-# RDK 硬件与系统基础
+# RDK Hardware & System Facts
 
-> 来源:整理自 D-Robotics RDK 官方文档、工具链与社区实践,逐条保留出处链接;由 device-knowledge 知识库忠实转换而来,未改写技术事实。
+The single most important rule: **per-board hardware facts are NOT uniform — confirm the board first, then read its row.** Pin voltage, power-LED color, default IP, CAN type, and model format all differ across the six boards. Reciting a "typical RDK board" from memory is how wrong answers happen.
 
-操作 RDK 前必须先确认板型;本 skill 覆盖各硬件子系统与系统底座的事实性知识。
+> Sources: official D-Robotics hardware-introduction docs — `rdk_x_doc` (X3/X5), `rdk_doc` (Ultra), `rdk_s_doc` (S100/S600). Re-verified against those pages. Per-board numbers are pinned in [board-specs.md](references/board-specs.md); deterministic lookup in `scripts/board_specs.py`.
 
-**板型感知（操作前必须确认）**：
-- 用 `cat /sys/class/socinfo/board_id` 或 `cat /etc/version` 确认板型（**通用，所有板型都装**），不要假设
-- BPU 监控请按板型选命令：X5 用 `hrut_bpuprofile -b 0`；X3 才有 `hrut_smi`/`bputop`；最稳的兜底是 `cat /sys/devices/system/bpu/bpu0/ratio`（所有板型都通用）
-- 模型格式**不通用**：X3=Bernoulli2(.bin), X5/Ultra=Bayes(.bin), **S100/S100P/S600=Nash(.hbm，由 hbm_runtime 加载)**，跨板型必须重新编译
-- 算力(INT8 TOPS)/内存(GB)对照：X3(5/2) → X5(10/4 或 8，两个 SKU) → Ultra(96/8) → S100(80/12) → S100P(128/24) → **S600(560/32 或 64，4× Nash core)**；方案选择须匹配硬件能力，规格以 [board-specs](references/board-specs.md) 为单一事实源
-- S100/S600 特有：MCU(R52+)实时控制、Nash 架构支持 Transformer 算子;X3 仅适合轻量模型和教学
-- **S600 是 S 系列新旗舰板(非机械臂)**:18× A78AE + 6× R52+ + 4× Nash BPU(560 TOPS),系统 **Ubuntu 24.04 + TROS Jazzy**(`/opt/tros/jazzy/`,包名 `tros-jazzy-*`),与 S100(22.04/Humble)的路径/包名不同,**别照搬**
-- 默认用户：官方 RDK 镜像普遍**同时提供 `sunrise/sunrise`(普通)+ `root/root`(超级)**两个账户。**X3** 主登录 sunrise（RDK Studio SSH 多为 root，重刷后确认）；**X5/Ultra** root 直连、sunrise 也在；**S100/S100P/S600** 官方配置向导默认两者都有(个别镜像仅 sunrise 配了 TROS,出不来 ros2 就 `su - sunrise`)
-- 模型目录：**X5 在 `/opt/hobot/model/x5/`（无 rdk 前缀）**；X3 在 `/opt/hobot/model/rdkx3/`（有 rdk 前缀，历史遗留）；S100 在 `/opt/hobot/model/s100/`（以实际 `ls` 为准）
+## Confirm the board first
 
-**先验证再执行**：
-- 文档/示例中的路径、包名、端口号可能与实际不符 — 先 `ls`/`find`/`ros2 pkg prefix` 确认再执行
-- 相对路径（如 `config/xxx.hbm`）可能依赖特定工作目录 — 改用 `find /opt/tros -name "*.hbm"` 定位绝对路径
-- 搜索 RDK 内容：优先 `site:developer.d-robotics.cc/rdk_doc` 或 `site:forum.d-robotics.cc`，官方文档 > GitHub > 社区帖子
-- 按文档执行连续失败 2 次：停下来重新审视，可能文档过时或板型不同
-- 不同板型信息**禁止混用**（X3 的 pinout 不能给 X5 用户）
+```bash
+cat /sys/class/socinfo/board_id      # universal, all boards
+cat /proc/device-tree/model          # board name string
+cat /etc/version                     # OS image version (rdkos_info on 2.1.0+)
+```
 
-**硬件操作安全**：
-- GPIO: 3.3V 逻辑电平，不同板型 pinout 不同 — 操作前查当前板型文档
-- I2C: 先 `i2cdetect -y <bus>` 扫描确认地址存在再读写
-- PWM: 控制舵机/电机先低频低占空比测试，避免硬件损坏
-- 散热: Ultra/S100 长时间满载需主动散热 — `hrut_somstatus` 监控温度
-- 网络排障: `ip addr` → `ping 8.8.8.8` → `ping <gateway>` → `nmcli`
+Never assume the board. An X3 pinout handed to an X5 user, or a SocketCAN command on an S100, is a real and common failure.
 
-## 硬件参考主题
+## The 6-board hardware cheat-sheet
 
-以下主题各带一句导航要点,细节详见 [硬件与系统参考](references/hardware-notes.md):
+| Board | BPU arch | INT8 TOPS | RAM | Model | OS / TROS | Power & LED | 40PIN IO | CAN | Default eth IP |
+|-------|----------|-----------|-----|-------|-----------|-------------|----------|-----|----------------|
+| X3 | Bernoulli2 | 5 | 2 GB | `.bin` | 22.04 / Humble | 5V/3A USB-C, **red** LED | 3.3V | none | `192.168.1.10` (`.127.10` on 2.1.0+) |
+| X5 | Bayes-e | 10 | 4/8 GB | `.bin` | 22.04 / Humble | 5V/5A USB-C, green+orange | 3.3V | **SocketCAN `can0`** (TCAN4550) | `192.168.127.10` |
+| Ultra | Bayes | 96 | 8 GB | `.bin` | 22.04 / Humble | ≥12V/5A DC, **red** LED | 3.3V | none | `192.168.1.10` |
+| S100 | Nash-e | 80 | 12 GB | `.hbm` | 22.04 / Humble | 12–20V DC, green+orange | 3.3V | MCU CANHAL (CAN5–9) | eth1 fixed `192.168.127.10` |
+| S100P | Nash-m | 128 | 24 GB | `.hbm` | 22.04 / Humble | 12–20V DC, green+orange | 3.3V | MCU CANHAL (CAN5–9) | eth1 fixed `192.168.127.10` |
+| S600 | Nash | 560 | 32/64 GB | `.hbm` | **24.04 / Jazzy** | 12–28V DC, green+orange | **1.8V, NO 40PIN** | MCU CANHAL (MCU×5 + Main×4) | eth1 fixed `192.168.127.10` |
 
-- **40PIN GPIO** — 物理兼容树莓派但 GPIO 编号不同,不能套用 RPi 编号;Python 用 `Hobot.GPIO`,C 用 `libwiringpi`
-- **摄像头系统** — MIPI 用 `hobot_mipi_cam`(指定 sensor 与 video_device);USB UVC 用 `hobot_usb_cam`,默认 YUYV 不稳必须设 **MJPEG**(先 `v4l2-ctl --list-formats-ext` 确认);GMSL 仅 S100/S100P 且需扩展板
-- **BPU 推理流水线** — C/C++ 用 `libdnn`/`bpu_infer_lib`,Python 在 X3/X5/Ultra 用 `hobot_dnn`(需系统 Python,不支持 conda/venv)、在 S100/S100P 用 `hbm_runtime`,ROS2 用 TROS 推理节点;监控优先级:sysfs 节点(最稳) → `hrut_bpuprofile`(X5/Ultra) → 最后才 `hrut_smi`/`bputop`(勿假设存在)
-- **模型转换概要** — X3/X5/Ultra 链路 `ONNX → hb_mapper checker → hb_mapper makertbin → .bin`;**S100/S100P 走天工开物/OE 工具链,产物 `.hbm`**;均在 x86 主机(优先 Docker)跑,不在板子上;PTQ 需校准数据集
-- **系统路径与存储** — `/opt/tros/humble/` 只读;`/userdata/`、`/tmp/`、`$HOME` 可写;板型识别 `cat /sys/class/socinfo/board_id`
-- **网络与连接** — 排障顺序 `ip addr` → `ping`;WiFi 用 `nmcli dev wifi connect`;CAN **仅 X5 是 SocketCAN**(`ip link set can0 ...`),**S100/S600 的 CAN 在 MCU 域走 CANHAL,不能用 `ip link`**(详见 rdk-peripheral-cookbook);多机 ROS2 须 `ROS_DOMAIN_ID` 一致 + 放行 UDP 7400+
-- **散热与功耗** — X3/X5 被动通常够;Ultra **必须**主动散热(12V/3A);S100 12-20V 供电;温度查 `hrut_somstatus`
-- **镜像与 TROS 工程** — TROS 一键构建入口 `robot_dev_config`(跑 `init.sh`);镜像构建 `rdk-gen`(X3)/`x5-rdk-gen`(X5)
-- **BPU 架构演进与模型互通性** — Bernoulli2(X3,仅 CNN) → Bayes(X5/Ultra,部分 Attention) → Nash(S100,CNN+Transformer);产物跨架构不互通必须重编(X3/X5/Ultra=`.bin`,S100/S100P=`.hbm`);S100 用「天工开物」工具链,命令族与 `hb_mapper` 不同
-- **RDK OS 版本线与用户系统差异** — 1.x/2.x(Foxy) vs 3.x(Humble);跨主版本须**重刷镜像**不能 `apt` 升级;版本判断优先 `rdkos_info`(2.1.0+) → `cat /etc/version`
+**Five facts people get wrong** — verified against official docs:
+- **Power LED color is not uniform.** X3 and Ultra = **RED**. X5 and S-series = **green** power + **orange** status/Main-running.
+- **Only X5 is Linux SocketCAN** (`can0`). X3/Ultra have no CAN. S100/S100P/S600 CAN is **MCU-domain via CANHAL — no `can0`, `ip link` does not apply.**
+- **S600 has no 40PIN header** and its digital IO is **1.8V** (every other board's 40-pin is 3.3V) on self-locking connectors (2×10 + 1×12 + 1×14-pin).
+- **S600 runs Ubuntu 24.04 + TROS Jazzy** (`/opt/tros/jazzy/`, `tros-jazzy-*`); S100/X-series run 22.04 + Humble. Don't copy paths/package names.
+- **Default IP differs by board AND firmware.** X3 ≤2.0.0 / Ultra = `192.168.1.10`; everything else = `192.168.127.10` (S-series on the fixed eth1).
 
-## 参考资料
+> Model artifacts never cross BPU architectures: X3/X5/Ultra → `.bin`, S100/S100P/S600 → `.hbm`. Recompile per board. (The conversion toolchain itself is the `rdk-device` skill.)
 
-- [RDK 板型规格对照](references/board-specs.md)（查阅时机:需核对某块板的 RAM/算力/接口数量/探测标识时）
-- [硬件与系统参考(详细章节)](references/hardware-notes.md)（查阅时机:确认板型后,需要某子系统的展开细节时）
+## Workflows
+
+### Workflow 1 — Answer a per-board hardware fact
+
+1. **Confirm the board** (`cat /sys/class/socinfo/board_id`) or take it from the user's words.
+2. **Look up the row** — run `python3 scripts/board_specs.py <board>` (or `--field can|power|io_level|default_ip|...`) for a deterministic answer; full detail in [board-specs.md](references/board-specs.md).
+3. **Quote the exact number for THAT board** — never average across boards or assume a "typical" value.
+4. **Flag a cross-board trap** if the user is mixing boards (X3 pinout ≠ X5; S600 IO is 1.8V; S600 path is `jazzy` not `humble`).
+
+### Workflow 2 — 40PIN / GPIO / bus wiring
+
+1. **Confirm the board and its IO voltage** — 3.3V on X3/X5/Ultra/S100/S100P; **1.8V on S600** (and S600 has no 40-pin, use its self-locking connectors).
+2. **The header is RPi-compatible in shape only** — GPIO numbering differs, never reuse RPi pin numbers. Python uses `Hobot.GPIO`, C uses `libwiringpi`.
+3. **Check what the 40-pin actually exposes** — on S100/S100P only a subset (I2C5 / UART2-muxed / SPI0 / 2×LPWM / 10×GPIO on J24); the rest of the SoC's buses are on the MCU/Camera 100-pin connectors. Details in [hardware-notes.md](references/hardware-notes.md) §1, §3.
+4. **For actually driving the pin** (toggle GPIO, PWM a servo, read an I2C sensor) → route to `rdk-peripheral-cookbook`. This skill states the facts; that one does the wiring.
+
+### Workflow 3 — CAN bus
+
+1. **Determine CAN type by board** (cheat-sheet column):
+   - **X5 only** is Linux SocketCAN: `ip link set can0 type can bitrate 500000 [dbitrate ... fd on] && ip link set can0 up` (TCAN4550, up to 8 Mbps; close the 120Ω termination switch for long/fast runs).
+   - **X3 / Ultra** have no CAN.
+   - **S100/S100P/S600** CAN is in the **MCU domain via CANHAL** — there is **no `can0` netdev** and `ip link` does NOT work. Frames go through CAN2IPC → IPC → A-core CANHAL.
+2. **If the user tries `ip link` on an S-series board** — stop them: explain it's MCU-domain CANHAL, then route the actual send/receive to `rdk-peripheral-cookbook`.
+
+### Workflow 4 — Power, cooling, and the indicator LED
+
+1. **Match the supply** (cheat-sheet): X3 5V/3A USB-C, X5 5V/5A USB-C, Ultra ≥12V/5A DC, S100/S100P 12–20V DC (150W), S600 12–28V DC (16A). **Never power from a laptop USB port** — under-supply causes brown-outs / reboot loops.
+2. **Read the LED correctly** — X3/Ultra: a **red** LED means power OK. X5/S-series: **green** = power OK, **orange** = status/Main running (orange blink on X5 needs firmware 3.1.0+).
+3. **Cooling** — Ultra requires active cooling (ships a fan); S-series (especially S600 @560 TOPS) needs a fan + heatsink under load. Monitor with `hrut_somstatus`.
+
+## Worked Examples
+
+**Example 1 — "RDK 各个板子的引脚都一样吗?能直接套树莓派的接线吗?"**
+No on both counts. The 40-pin is RPi-compatible in *shape* but GPIO numbering differs (use `Hobot.GPIO`, not RPi numbers). Across RDK boards the pinout differs too — X5 has more UART/PWM/I2C than X3. And **S600 has no 40-pin at all**: it uses self-locking connectors at **1.8V** IO (not 3.3V), so wiring 3.3V peripherals straight in is wrong. Confirm the board first, then read its row in board-specs.md.
+
+**Example 2 — "S100 上怎么用 CAN?我 `ip link set can0 up` 报错没有这个设备。"**
+That's expected — S100's CAN is **not** Linux SocketCAN. The CAN controllers (CAN5–CAN9) are in the **MCU domain** and reached through the CANHAL library, so there is no `can0` netdev and `ip link` doesn't apply. (Only **X5** has SocketCAN `can0`, via TCAN4550.) For sending/receiving frames on S100, route to `rdk-peripheral-cookbook`.
+
+**Example 3 — "板子默认用户名密码是什么?网口连不上。"**
+Depends on the board. X5/Ultra: `root/root` (and `sunrise/sunrise`). S100/S100P/S600: the wizard sets **both** `sunrise/sunrise` and `root/root`. X3: `sunrise/sunrise` primary, `root/root` usually present. For "won't connect" on an S-series board, the outer port **eth1 is a fixed static `192.168.127.10`** — set your PC to the same subnet (e.g. `192.168.127.100`) and try `ssh root@192.168.127.10`.
+
+**Example 4 — "S600 和 S100 是不是一样的,文档能照搬吗?"**
+No — re-confirm before copying. S600 is the new flagship: 18× A78AE + 6× R52+ + **4× Nash BPU (560 TOPS)**, and it runs **Ubuntu 24.04 + TROS Jazzy** (`/opt/tros/jazzy/`, packages `tros-jazzy-*`), whereas S100 is 22.04 + Humble. S600 also has **no 40-pin** and **1.8V** IO. Same `.hbm` model family and `hbm_runtime`, but paths, package names, and the IO interface differ — don't copy S100 commands verbatim.
+
+## Common Pitfalls
+
+| ❌ Don't | ✅ Do |
+|---------|------|
+| Assume one "typical RDK board" spec | Confirm the board, read its row in board-specs.md |
+| Reuse RPi GPIO numbers on the 40-pin | Use `Hobot.GPIO` / `libwiringpi`; numbering differs |
+| Wire a 3.3V peripheral to S600 IO | S600 IO is **1.8V** on self-locking connectors (no 40-pin) |
+| `ip link set can0 ...` on S100/S600 | Only X5 is SocketCAN; S-series CAN is MCU-domain CANHAL |
+| Expect a green "power OK" LED everywhere | X3/Ultra power LED is **red**; X5/S-series green+orange |
+| Copy S100's `/opt/tros/humble` to S600 | S600 is Ubuntu 24.04 + Jazzy → `/opt/tros/jazzy/` |
+| Power any board from a laptop USB port | Use the official supply; under-power = reboot loops |
+| Assume `192.168.1.10` for every board | X5/S-series = `192.168.127.10`; only X3≤2.0.0/Ultra = `.1.10` |
+
+## Reference Map
+
+| Read this | When |
+|-----------|------|
+| [board-specs.md](references/board-specs.md) | Need an exact per-board number — RAM / TOPS / interface counts / power / LED / IO level / default IP / probe IDs |
+| [hardware-notes.md](references/hardware-notes.md) | Board confirmed, need a subsystem deep-dive — 40PIN, camera, buses, CAN, power, display, network, BPU monitoring, paths, thermals, OS/user differences |
+| `scripts/board_specs.py` | Deterministic board → spec lookup (`board_specs.py s600`, or `--field can`) |

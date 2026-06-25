@@ -1,0 +1,65 @@
+{
+  "skill_name": "rpi-knowledge",
+  "description": "Test prompts that verify rpi-knowledge triggers and produces correct, officially-grounded Raspberry Pi guidance. Prompts are written the way a real Pi user would phrase them (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "pi5-gpio-rp1-trap",
+      "prompt": "我在树莓派 5 上用 RPi.GPIO 控制引脚，结果报错，是不是板子坏了？",
+      "expected_output": "Explains Pi 5 GPIO is on the RP1 chip so RPi.GPIO can't work, and routes to gpiozero/lgpio (rpi-lgpio for legacy code).",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "Says the board is not broken — RPi.GPIO does not work on Pi 5 because GPIO is on the RP1 chip (not the SoC)." },
+        { "id": "1b", "text": "Recommends gpiozero (and/or lgpio / libgpiod) as the correct library." },
+        { "id": "1c", "text": "Mentions rpi-lgpio as a drop-in for existing RPi.GPIO code, OR that pins are still BCM-numbered." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "raspistill-deprecated",
+      "prompt": "树莓派上 raspistill 提示找不到命令，现在拍照用什么？",
+      "expected_output": "raspistill/raspivid are deprecated; use rpicam-* commands (rpicam-jpeg/rpicam-hello) or Picamera2 in Python.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "States raspistill/raspivid (legacy stack) are deprecated/unsupported." },
+        { "id": "2b", "text": "Gives the rpicam-* replacement (e.g. rpicam-hello / rpicam-jpeg / rpicam-vid)." },
+        { "id": "2c", "text": "Mentions Picamera2 for Python and/or libcamera as the underlying stack." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "pi-npu-yolo",
+      "prompt": "树莓派 5 有 NPU 吗？能不能加速跑 YOLO？",
+      "expected_output": "No on-board NPU; CPU inference (ONNX/TFLite), or add a Hailo AI HAT+ (Pi 5 only) running HEF models.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Says Raspberry Pi 5 has no on-board NPU; bare inference runs on the CPU (ONNX Runtime / TFLite)." },
+        { "id": "3b", "text": "Mentions the Hailo AI HAT+ (Pi 5) as the acceleration path, with HEF model format." },
+        { "id": "3c", "text": "Distinguishes the 13 TOPS (Hailo-8L) vs 26 TOPS (Hailo-8) variants, OR notes HEF is compiled on a host." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "max-ram-16gb",
+      "prompt": "树莓派最大能上多少内存？16GB 是哪一款？",
+      "expected_output": "16GB is Pi 5 only (BCM2712, Cortex-A76 @2.4GHz, LPDDR4X); Pi 4B and CM4 cap at 8GB.",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "States the 16GB variant is Raspberry Pi 5 only." },
+        { "id": "4b", "text": "States Pi 4B and CM4 max out at 8GB." },
+        { "id": "4c", "text": "Correctly identifies Pi 5 as BCM2712 / Cortex-A76 (does NOT call Pi 5 a Cortex-A72)." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "config-txt-location",
+      "prompt": "我改了树莓派的 /boot/config.txt 但好像没生效，为什么？",
+      "expected_output": "On Bookworm+ the file moved to /boot/firmware/config.txt; /boot/config.txt is now a placeholder.",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "Says on Bookworm and later config.txt is at /boot/firmware/config.txt." },
+        { "id": "5b", "text": "Notes /boot/config.txt is now a placeholder / no longer the real file, so edits there have no effect." }
+      ]
+    }
+  ]
+}

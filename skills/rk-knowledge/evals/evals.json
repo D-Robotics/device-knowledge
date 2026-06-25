@@ -1,0 +1,64 @@
+{
+  "skill_name": "rk-knowledge",
+  "description": "Test prompts that verify rk-knowledge triggers and produces correct, RK35xx-aware guidance. Prompts are written the way a real Rockchip RK3588/RK3576 developer would phrase them (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "version-mismatch-is-first-suspect",
+      "prompt": "我在 RK3588 上跑 rknn 模型，rknn_init 报 load model failed / 版本不匹配，模型是我自己转的，怎么排查？",
+      "expected_output": "Leads with the toolkit2-vs-librknnrt version match as the first thing to check, with concrete version-check commands, before suspecting the model.",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "Identifies a PC-toolkit (rknn-toolkit2) vs board-runtime (librknnrt) version mismatch as the most likely cause." },
+        { "id": "1b", "text": "Says to make the two versions match — either re-convert with the matching toolkit2 or upgrade librknnrt + the NPU driver on the board." },
+        { "id": "1c", "text": "Does NOT jump to blaming the model architecture as the first step." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "tops-is-whole-npu-not-per-core",
+      "prompt": "RK3588 不是标称 6 TOPS 吗，为什么我一个模型跑起来好像只用了一部分算力？",
+      "expected_output": "Explains 6 TOPS is the whole 3-core NPU, default AUTO uses one core, and how to use all of it via core_mask / multiple instances.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "States the 6 TOPS is the whole NPU which has 3 cores (not 6 TOPS per core)." },
+        { "id": "2b", "text": "Explains a single model on default NPU_CORE_AUTO runs on one core (~1/3 of the NPU)." },
+        { "id": "2c", "text": "Says to use the full NPU by setting core_mask (e.g. NPU_CORE_0_1_2) or running multiple instances pinned to different cores." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "yolov8-deploy-flow",
+      "prompt": "怎么把我训练的 YOLOv8 部署到 Orange Pi 5（RK3588）上跑？",
+      "expected_output": "Two-stage flow: PC-side convert to .rknn with rknn-toolkit2 and target_platform=rk3588, board-side run with rknn-toolkit-lite2; recommends the airockchip fork for export.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Says to convert on a PC with rknn-toolkit2 to a .rknn, with target_platform set to rk3588." },
+        { "id": "3b", "text": "Says to run on the board with rknn-toolkit-lite2 (or librknnrt C API)." },
+        { "id": "3c", "text": "Recommends exporting YOLO ONNX from the airockchip fork (e.g. airockchip/ultralytics_yolov8) for an RKNN-friendly head." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "llm-is-separate-sdk",
+      "prompt": "我想在 RK3588 上跑 Qwen 大模型，用 rknn-toolkit2 转一下就行吗？",
+      "expected_output": "No — LLMs use the separate RKNN-LLM SDK (rkllm-toolkit / .rkllm / librkllmrt), not rknn-toolkit2.",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "Says rknn-toolkit2 is not the right tool for LLMs (it is for CNN/vision models)." },
+        { "id": "4b", "text": "Points to the separate RKNN-LLM SDK (rkllm-toolkit / .rkllm / librkllmrt) for running an LLM on RK3588." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "rknn-on-pypi-and-platform-specific",
+      "prompt": "rknn-toolkit2 现在能直接 pip install 吗？转好的 .rknn 能 RK3588 和 RK3576 通用吗？",
+      "expected_output": "Yes, rknn-toolkit2 is on PyPI (2.3.x); but a .rknn is platform-specific — target_platform must match, RK3588 and RK3576 are not interchangeable.",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "Confirms rknn-toolkit2 is installable from PyPI (pip install rknn-toolkit2), latest 2.3.x." },
+        { "id": "5b", "text": "States a .rknn is platform-specific: target_platform must match the SoC, so an rk3588 model does not run on rk3576 (and vice-versa)." }
+      ]
+    }
+  ]
+}

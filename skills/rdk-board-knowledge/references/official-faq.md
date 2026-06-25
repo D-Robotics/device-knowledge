@@ -1,34 +1,34 @@
-# 官方 FAQ 速查(按主题分组)
+# Official FAQ Quick-Reference (grouped by topic)
 
-> 来源:整理自 D-Robotics 官方文档仓 `D-Robotics/rdk_doc` 与 `D-Robotics/rdk_s_doc` 的 `docs/08_FAQ/01..07_*.md`(默认分支 main),逐条保留官方原意与出处链接,只搬文档确有的条目,未改写技术事实。
+> Source: compiled from the D-Robotics official doc repos `D-Robotics/rdk_doc` and `D-Robotics/rdk_s_doc`, files `docs/08_FAQ/01..07_*.md` (default branch `main`). Each entry preserves the official meaning and source link; only entries that actually exist in the docs are carried over, and technical facts are not rewritten. The Q&A point text and official quotes are kept in their original Chinese so the official wording stays faithful.
 
-## 怎么用这份表
+## How to use this table
 
-- 这是**官方权威 FAQ** 的要点+URL 索引;遇到具体报错,先到 [常见故障速查(55 条)](failure-hints.md) 取排障切入点与命令,再回这里看官方对该问题的完整问答。两者互补:failure-hints 是经验性"现象→建议",official-faq 是官方"问题→答案要点+官方 URL"。
-- **板型覆盖**:每条标注覆盖板型。两仓 FAQ 是同一套 7 主题结构——`rdk_s_doc` 是 `rdk_doc` FAQ 的 S100 化/中立化副本(同 Q 编号),`rdk_doc` 中 X3 特定问答在 S 仓被泛化。下表以 `rdk_doc` 为主条目,**S 系列真正新增/差异条目单列在每节末尾**。
-- **文档站已拆分(2026-06,重要)**:下面给的 `developer.d-robotics.cc/rdk_doc/FAQ/...` 是**旧合并站**链接,仍可打开但顶部挂"已迁移至全新资料中心"横幅(2026-06-10 起归档)。**新权威站**是 `rdk_x_doc`(X 系列 FAQ)与 `rdk_s_doc`(S 系列 FAQ);要给用户最新 URL/精准定位,用 skill `rdk-doc-finder`。注:`rdk_s_doc` 仓内 FAQ 就在 `docs/08_FAQ/`,**没有 `docs_s/` 目录**(`docs_s/` 是旧 `rdk_doc` 仓里放 S 内容的前缀)。
-- **旧站 URL 规律**:`https://developer.d-robotics.cc/rdk_doc/FAQ/<去前缀文件名>`(X);S 系列 `.../rdk_doc/rdk_s/FAQ/<文件名>`;带数字前缀的 `.../08_FAQ/...` 形式会 404。
-- 锚点:站点把 `### Qn: 标题` 渲染为可定位标题,精确锚点以站点实际为准;拿不准就用本节页 URL + 文内 Q 号。
+- This is the **authoritative official FAQ** index (key points + URLs). For a concrete error, first go to [failure-hints.md](failure-hints.md) for the diagnostic entry point and command, then come back here for the official full answer. They are complementary: failure-hints is the empirical "symptom → advice"; official-faq is the official "question → answer points + official URL".
+- **Board coverage**: every entry is tagged with the boards it covers. Both repos share the same 7-topic FAQ structure — `rdk_s_doc` is an S100-ized / neutralized copy of the `rdk_doc` FAQ (same Q numbers), and X3-specific Q&A in `rdk_doc` is generalized in the S repo. The table below uses `rdk_doc` as the primary entries; **genuinely new/different S-series entries are listed separately at the end of each section**.
+- **Doc site has split (2026-06, important)**: the `developer.d-robotics.cc/rdk_doc/FAQ/...` links below are the **old merged site** — still openable but they show a "migrated to the new resource center" banner (archived from 2026-06-10). The **new authoritative sites** are `rdk_x_doc` (X-series FAQ) and `rdk_s_doc` (S-series FAQ); for the latest URL / precise location, use the `rdk-doc-finder` skill. Note: in `rdk_s_doc` the FAQ lives at `docs/08_FAQ/` — there is **no `docs_s/` directory** (`docs_s/` was the old `rdk_doc` repo's prefix for S content).
+- **Old-site URL rule**: `https://developer.d-robotics.cc/rdk_doc/FAQ/<filename-without-numeric-prefix>` (X); S-series `.../rdk_doc/rdk_s/FAQ/<filename>`; the number-prefixed `.../08_FAQ/...` form 404s.
+- **Anchors**: the site renders `### Qn: <title>` as an addressable heading; the exact anchor depends on the live site, so when unsure use the section page URL + the in-page Q number.
 
-源文件总览(GitHub):
+Source-file overview (GitHub):
 
-| 主题 | rdk_doc 源 | rdk_s_doc 源 | 文档站(rdk_doc) |
+| Topic | rdk_doc source | rdk_s_doc source | Doc site (rdk_doc) |
 |---|---|---|---|
-| 系统/硬件 | `docs/08_FAQ/01_hardware_and_system.md` | 同路径 | `/rdk_doc/FAQ/hardware_and_system` |
-| 接口/外设 | `docs/08_FAQ/02_interface.md` | 同路径 | `/rdk_doc/FAQ/interface` |
-| 应用/编译 | `docs/08_FAQ/03_applications_and_examples.md` | 同路径 | `/rdk_doc/FAQ/applications_and_examples` |
-| 多媒体 | `docs/08_FAQ/04_multimedia.md` | 同路径 | `/rdk_doc/FAQ/multimedia` |
-| 模型/BPU/工具链 | `docs/08_FAQ/05_toolchain.md` | 同路径 | `/rdk_doc/FAQ/toolchain` |
-| TROS/ROS | `docs/08_FAQ/06_tros_ros.md` | 同路径 | `/rdk_doc/FAQ/tros_ros` |
-| 桌面应用 | `docs/08_FAQ/07_desktop_app.md` | 同路径 | `/rdk_doc/FAQ/desktop_app` |
+| System / hardware | `docs/08_FAQ/01_hardware_and_system.md` | same path | `/rdk_doc/FAQ/hardware_and_system` |
+| Interface / peripherals | `docs/08_FAQ/02_interface.md` | same path | `/rdk_doc/FAQ/interface` |
+| Apps / compilation | `docs/08_FAQ/03_applications_and_examples.md` | same path | `/rdk_doc/FAQ/applications_and_examples` |
+| Multimedia | `docs/08_FAQ/04_multimedia.md` | same path | `/rdk_doc/FAQ/multimedia` |
+| Model / BPU / toolchain | `docs/08_FAQ/05_toolchain.md` | same path | `/rdk_doc/FAQ/toolchain` |
+| TROS / ROS | `docs/08_FAQ/06_tros_ros.md` | same path | `/rdk_doc/FAQ/tros_ros` |
+| Desktop app | `docs/08_FAQ/07_desktop_app.md` | same path | `/rdk_doc/FAQ/desktop_app` |
 
 ---
 
-## 1. 系统、硬件与环境配置
+## 1. System, hardware & environment
 
-官方页:<https://developer.d-robotics.cc/rdk_doc/FAQ/hardware_and_system>(S 系列同主题:<https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/hardware_and_system>)
+Official page: <https://developer.d-robotics.cc/rdk_doc/FAQ/hardware_and_system> (S-series same topic: <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/hardware_and_system>)
 
-| 官方 FAQ 问题 | 答案要点 | 覆盖板型 |
+| Official FAQ question | Answer points | Boards covered |
 |---|---|---|
 | 什么是 RDK 套件?(Q1) | 基于 D-Robotics 智能芯片的机器人开发者套件:X3 / X3 Module / X5 / X5 Module / Ultra / S100 等。 | 全系 |
 | 如何查系统版本号?(Q2) | `cat /etc/version`(大版本);`apt list --installed \| grep hobot`;新系统(2.1.0+)用 `rdkos_info`。 | 全系 |
@@ -74,26 +74,26 @@
 | Docker/OE/Samples 下载慢?(Q42) | 配国内 Docker 加速器、用断点续传、走官方资源中心与 GitHub `D-Robotics` 组织。 | 全系 |
 | 交叉编译环境怎么配?(Q43) | 普通程序:x86 上装 aarch64 工具链 + Sysroot + CMake toolchain 文件;ROS/TROS:**强烈推荐官方交叉编译 Docker**(版本须对应 Foxy/Humble)。 | 全系 |
 
-### S 系列特有/差异(系统硬件)
+### S-series specific/different (system & hardware)
 
-来源:`rdk_s_doc/docs/08_FAQ/01_hardware_and_system.md` 与 rdk_doc 同文件中的 S100 条目(Q44–Q47)。
+Source: `rdk_s_doc/docs/08_FAQ/01_hardware_and_system.md` plus the S100 entries (Q44–Q47) in the same rdk_doc file.
 
-| 问题 | 答案要点 | 板型 |
+| Question | Answer points | Boards |
 |---|---|---|
 | IMX219 等 MIPI 接 S100 + 验证(rdk_doc Q44 / S 仓 Q29) | 24pin FPC 加强筋朝上锁紧;跑 `/app/pydev_demo/10_mipi_camera_sample` 的 `01_mipi_camera_yolov5x.py`;`i2cdetect -y -r 1/2` 查地址(IMX219≈0x10)。 | S100 |
 | S100 Docker 装后服务起不来(rdk_doc Q45 / S 仓 Q30) | Docker 需 iptables legacy 模式:`update-alternatives --set iptables /usr/sbin/iptables-legacy`、`... ip6tables ip6tables-legacy`,再 `systemctl restart docker`。 | S100 |
 | S100 时区(rdk_doc Q46 / S 仓 Q31) | 默认上海时区(UTC+8),由 `/etc/systemd/system.conf` 的 `DefaultEnvironment="TZ=CST-08:00"` 配置;要手动改先注释该行再 `reboot`。 | S100 |
 | S100 桌面 Power Statistics 节点显示不全(rdk_doc Q47 / S 仓 Q32) | 默认无电源管理驱动,需厂商提供;该应用读 `/sys/class/power_supply/{ac,usb,battery}`,可参考内核 `test_power.c`(`power_supply_register`)。 | S100 |
 
-> 注:S100/S100P 为 **Nash 架构**、模型产物 `.hbm`,与 X 系列 BPU(X3=Bernoulli2,X5/Ultra=Bayes)不通用;S100=Nash-e、Super100P=Nash-m(见第 5 节 Q1)。
+> Note: S100/S100P are the **Nash family**, model artifact `.hbm`, not interchangeable with X-series BPUs. Each board has a distinct march and artifacts never interchange across them: X3=`bernoulli2`, X5=`bayes-e`, Ultra=`bayes`, S100=`nash-e`, S100P/Super100P=`nash-m`, S600=`nash-p` (see Section 5 Q1).
 
 ---
 
-## 2. 接口、外设与驱动
+## 2. Interfaces, peripherals & drivers
 
-官方页:<https://developer.d-robotics.cc/rdk_doc/FAQ/interface>(S 系列:<https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/interface>)
+Official page: <https://developer.d-robotics.cc/rdk_doc/FAQ/interface> (S-series: <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/interface>)
 
-| 官方 FAQ 问题 | 答案要点 | 覆盖板型 |
+| Official FAQ question | Answer points | Boards covered |
 |---|---|---|
 | 40PIN VDD_5V 能做电源输入吗?(Q1) | 板卡 **V1.2 及以上**支持,看 PCB 丝印确认,谨慎操作。 | X3 |
 | 能用 C/C++ 操作 40PIN GPIO 吗?(Q2) | 支持,可参考 WiringPi(X3)等社区库与官方 GPIO 章节。 | 全系 |
@@ -109,15 +109,15 @@
 | MIPI 示例报 `lt8618_ioctl failed`?(Q12) | 多为权限不足(用 `sudo` 跑)或依赖的 HDMI(lt8618)设备未就绪/被占用。 | X3 为主 |
 | HDMI 支持哪些分辨率?(Q13) | 随板型/SoC/OS 版本;通用支持 1080p/720p 等;查手册、`xrandr`、`dmesg \| grep -i hdmi`、`srpi-config`。 | 全系 |
 
-> S 仓本节为同结构副本,无 X3 V1.2 之外的 S 特有新增条目;S100 接口细节走对应硬件手册链接。
+> The S repo's version of this section is a same-structure copy; aside from the X3 V1.2 item there are no S-specific additions — for S100 interface detail follow the corresponding hardware-manual links.
 
 ---
 
-## 3. 应用开发、编译与示例
+## 3. App development, compilation & samples
 
-官方页:<https://developer.d-robotics.cc/rdk_doc/FAQ/applications_and_examples>(S 系列:<https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/applications_and_examples>)
+Official page: <https://developer.d-robotics.cc/rdk_doc/FAQ/applications_and_examples> (S-series: <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/applications_and_examples>)
 
-| 官方 FAQ 问题 | 答案要点 | 覆盖板型 |
+| Official FAQ question | Answer points | Boards covered |
 |---|---|---|
 | 第三方库怎么装/交叉编译?(Q1) | 板端 `apt`/`pip` 或交叉编译;依赖与目标架构须一致。 | 全系 |
 | 编译被 kill / 内存不足?(Q2) | 加 swap(`dd`/`fallocate` 建文件→`mkswap`→`swapon`)、降并行度。 | 全系 |
@@ -135,34 +135,34 @@
 | Websocket 只有图像无 AI 结果?(Q14) | AI 推理节点未出结果或 `only_show_image` 配置;需先收到首帧 ai_msg 才叠加。 | 全系 |
 | TROS Humble 怎么配零拷贝?(Q15) | 设 `RMW_IMPLEMENTATION=rmw_fastrtps_cpp` + Fast DDS 共享内存 XML(`FASTRTPS_DEFAULT_PROFILES_FILE`)+ `RMW_FASTRTPS_USE_QOS_FROM_XML=1` + `ROS_DISABLE_LOANED_MESSAGES=0`。 | 全系(Humble) |
 
-> S 仓本节为同结构副本,无 S 特有新增条目。
+> The S repo's version of this section is a same-structure copy with no S-specific additions.
 
 ---
 
-## 4. 多媒体处理与应用
+## 4. Multimedia processing & apps
 
-官方页:<https://developer.d-robotics.cc/rdk_doc/FAQ/multimedia>(S 系列:<https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/multimedia>)
+Official page: <https://developer.d-robotics.cc/rdk_doc/FAQ/multimedia> (S-series: <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/multimedia>)
 
-| 官方 FAQ 问题 | 答案要点 | 覆盖板型 |
+| Official FAQ question | Answer points | Boards covered |
 |---|---|---|
 | RTSP 解码报错?(视频 Q1) | 多因码流缺 SPS/PPS:ffmpeg 推流加 `-bsf:v h264_mp4toannexb`;解码常仅支持到 1080p;**不建议 VLC 直接推流**。 | 全系 |
 | tinyalsa 参数含义/用法?(音频 Q1) | `tinymix -l` 列声卡、`tinymix -c N ...` 读写控件、`tinyplay`/`tinycap`(-D/-d/-c/-b/-r/-p/-n/-t)。 | 全系 |
 | 怎么区分 USB 声卡与板载声卡?(音频 Q2) | `cat /proc/asound/cards` 看序号;`amixer -c X` / `tinymix -c X` 指定声卡;序号随插入顺序变。 | 全系 |
 | X3 音频子板 + USB 声卡共存(PulseAudio)?(音频 Q3) | 看 `/dev/snd/` 节点,编辑 `/etc/pulse/default.pa` 加 `module-alsa-sink/source device=hw:X,Y`,重启生效。 | X3 |
 
-### S 系列特有(多媒体)
+### S-series specific (multimedia)
 
-| 问题 | 答案要点 | 板型 |
+| Question | Answer points | Boards |
 |---|---|---|
 | S100 怎么用图形界面支持音频(音频 Q4) | 改 `/etc/pulse/default.pa`:`fragment_size` 需满足 pdma 的 **64 字节对齐**(如设 1920),按声卡/设备号(见 S100 音频章节)配 `device=hw:X,Y`,保存后重启系统。 | S100 |
 
 ---
 
-## 5. AI 模型、算法与工具链
+## 5. AI models, algorithms & toolchain
 
-官方页:<https://developer.d-robotics.cc/rdk_doc/FAQ/toolchain>(S 系列:<https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/toolchain>)
+Official page: <https://developer.d-robotics.cc/rdk_doc/FAQ/toolchain> (S-series: <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/toolchain>)
 
-| 官方 FAQ 问题 | 答案要点 | 覆盖板型 |
+| Official FAQ question | Answer points | Boards covered |
 |---|---|---|
 | 提工具链问题要附哪些信息?(Q1) | 平台+BPU 架构(X3=Bernoulli2 / Ultra=Bayes / X5=Bayes-e / **S100=Nash-e / Super100P=Nash-m**)、`horizon_nn` 版本、Python 版本、Docker 版本、ONNX、yaml、`hb_mapper` 日志、校准集、板端报错、`rdkos_info`。 | 全系 |
 | AI 开发官方资源?(Q2) | RDK 用户手册工具链章节、RDK Model Zoo(`github.com/D-Robotics/rdk_model_zoo`)、开发者社区资源中心。 | 全系 |
@@ -180,21 +180,21 @@
 | 推理无结果/远差于预期(Pipeline 排查)?(rdk_doc Q14 / S 仓 Q11) | 逐段查:预处理(与训练完全一致、可视化对比、yaml norm/mean/std)、模型转换(版本/yaml/校准集/敏感层/日志)、板端 Runtime、后处理(维度/anchors/阈值/坐标映射)、端到端验证。 | 全系 |
 | `hrt_*` 板端工具怎么获取?(rdk_doc Q15 / S 仓 Q12) | 预装于 `/usr/bin`、`/opt/hobot/bin` 或工具链包 `ddk/.../board/.../bin/`;常用 `hrt_model_exec`、`hrt_bpu_monitor`/`hrut_somstatus`。 | 全系 |
 
-### 工具链参考附录(非 Q&A,体量大,按指针使用)
+### Toolchain reference appendix (not Q&A — large, use as a pointer)
 
-`05_toolchain.md` 在 Q15 之后是大段**参考资料**(不是问答),需要时直接读源文件或文档站,不在此逐行转抄:
+After Q15, `05_toolchain.md` is a large block of **reference material** (not Q&A); read the source file or the doc site directly when needed rather than transcribing it line by line here:
 
-- **模型量化错误码表 / 上板错误及解决**(`hb_mapper checker`、`hb_mapper makertbin` 报错、算法模型上板错误):rdk_doc 源 `docs/08_FAQ/05_toolchain.md` 的 `模型量化错误及解决方法`(锚点 `#model_convert_errors_and_solutions`)与 `算法模型上板错误及解决方法` 段;站点 <https://developer.d-robotics.cc/rdk_doc/FAQ/toolchain>。
-- **模型量化及上板使用技巧 / yaml 配置模板**:同文件 `模型量化及上板使用技巧` 段。
-- **S 仓专有:Transformer 使用说明**(AddTransformer/MeanTransformer/ResizeTransformer/BGR2NV12Transformer 等数十个预处理 Transformer 参考)、**示例 YOLOv5x 模型使用说明**、**模型精度调优 checklist**(锚点 `#checklist`)、**定点 .bin 多 batch 上板说明**:源 `rdk_s_doc/docs/08_FAQ/05_toolchain.md`;站点 <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/toolchain>。
+- **Model-quantization error-code table / on-board errors & fixes** (`hb_mapper checker`, `hb_mapper makertbin` errors, on-board model errors): rdk_doc source `docs/08_FAQ/05_toolchain.md`, sections `模型量化错误及解决方法` (anchor `#model_convert_errors_and_solutions`) and `算法模型上板错误及解决方法`; site <https://developer.d-robotics.cc/rdk_doc/FAQ/toolchain>.
+- **Quantization & on-board usage tips / yaml config templates**: same file, section `模型量化及上板使用技巧`.
+- **S-repo only: Transformer usage notes** (AddTransformer/MeanTransformer/ResizeTransformer/BGR2NV12Transformer and dozens more preprocessing Transformers), **example YOLOv5x model usage notes**, **model accuracy-tuning checklist** (anchor `#checklist`), **fixed-point `.bin` multi-batch on-board notes**: source `rdk_s_doc/docs/08_FAQ/05_toolchain.md`; site <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/toolchain>.
 
 ---
 
-## 6. TROS / ROS 开发
+## 6. TROS / ROS development
 
-官方页:<https://developer.d-robotics.cc/rdk_doc/FAQ/tros_ros>(S 系列:<https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/tros_ros>)
+Official page: <https://developer.d-robotics.cc/rdk_doc/FAQ/tros_ros> (S-series: <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/tros_ros>)
 
-| 官方 FAQ 问题 | 答案要点 | 覆盖板型 |
+| Official FAQ question | Answer points | Boards covered |
 |---|---|---|
 | TROS 包出错的预排查?(Q1) | `apt update && upgrade` 升 tros;launch 改 `--log-level DEBUG` 定位节点;清 `~/.ros/log/` 重跑;必要时重装功能包。 | 全系 |
 | TROS 与 ROS2 区别?Foxy 怎么升 Humble?(Q2) | TROS=基于 ROS2 的 RDK 适配版,Foxy↔Ubuntu20.04、Humble↔Ubuntu22.04,**跨大版本须重刷镜像,不能 apt 升**;与同版 ROS2 完全兼容。 | 全系 |
@@ -211,22 +211,22 @@
 | 怎么配 TROS 零拷贝?(Q13) | Foxy 用 `hobot_shm` 共享内存方案;Humble 用 Fast DDS 共享内存(环境变量见第 3 节 Q15)。 | 全系 |
 | 除官方源还有别的 ROS2 源吗?(rdk_doc Q14) | 有 ROS2 官方源 `packages.ros.org/ros2/ubuntu`(配 locale + GPG keyring + source 后 `apt install ros-humble-*`)及国内镜像;与 TROS 源共存时按版本/优先级选包。 | 全系 |
 
-> S 仓本节为同结构副本(止于 Q13);"其他 ROS2 源"(rdk_doc Q14)主要见 rdk_doc。
+> The S repo's version of this section is a same-structure copy (ends at Q13); the "other ROS2 sources" item (rdk_doc Q14) is mainly in rdk_doc.
 
 ---
 
-## 7. 桌面应用
+## 7. Desktop apps
 
-官方页:<https://developer.d-robotics.cc/rdk_doc/FAQ/desktop_app>(S 系列:<https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/desktop_app>)
+Official page: <https://developer.d-robotics.cc/rdk_doc/FAQ/desktop_app> (S-series: <https://developer.d-robotics.cc/rdk_doc/rdk_s/FAQ/desktop_app>)
 
-| 官方 FAQ 问题 | 答案要点 | 覆盖板型 |
+| Official FAQ question | Answer points | Boards covered |
 |---|---|---|
 | 下载的 VS Code 打不开?(Q1) | Electron GPU 加速问题,命令行启动加开关:`code --disable-gpu`。 | 全系(桌面镜像) |
 | 已知问题:切换系统语言后无法登录桌面 | Settings → Region & Language 切语言重启会话后,可能输入正确密码也进不去桌面;**重新上电或 reboot 即可完成切换**(建议谨慎使用该功能)。 | 全系(桌面镜像) |
 
 ---
 
-## 维护备注
+## Maintenance notes
 
-- 本表只搬官方文档确有的条目;`rdk_doc` 与 `rdk_s_doc` 的 FAQ 为同一套 7 主题结构,S 仓是 S100 化副本,故主条目取 `rdk_doc`、S 特有/差异单列。更新时:用 `gh api repos/D-Robotics/<rdk_doc|rdk_s_doc>/contents/docs/08_FAQ/<file>?ref=main --jq .content | base64 -d` 取最新原文核对。
-- 工具链(第 5 节)Q15 之后的量化错误码表、Transformer 参考、精度 checklist、多 batch 等属参考附录,体量大且随版本变动,刻意以指针给出,避免在 skill 内固化易过期的长配置。
+- This table carries only entries that actually exist in the official docs; the `rdk_doc` and `rdk_s_doc` FAQs share the same 7-topic structure, with the S repo being an S100-ized copy, so primary entries come from `rdk_doc` and S-specific/different entries are listed separately. To update: re-fetch the latest source with `gh api repos/D-Robotics/<rdk_doc|rdk_s_doc>/contents/docs/08_FAQ/<file>?ref=main --jq .content | base64 -d` and reconcile.
+- The toolchain section (5) after Q15 — the quantization error-code tables, Transformer reference, accuracy checklist, multi-batch notes, etc. — is reference appendix material: large and version-dependent, so it is given as a pointer rather than fixing easily-outdated long configs inside the skill.

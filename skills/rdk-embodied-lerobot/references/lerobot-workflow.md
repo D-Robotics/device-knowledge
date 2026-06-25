@@ -1,134 +1,272 @@
-# RDK 具身智能部署工作流参考
+# RDK Embodied Deployment Workflow Reference
 
-> 来源:[D-Robotics/rdk_LeRobot_tools](https://github.com/D-Robotics/rdk_LeRobot_tools)(`stable` 分支)、[D-Robotics/lerobot](https://github.com/D-Robotics/lerobot)、[D-Robotics/openpi_runtime](https://github.com/D-Robotics/openpi_runtime) README,逐条保留出处;命令以仓库当前版本为准。
+> Sources: [D-Robotics/rdk_LeRobot_tools](https://github.com/D-Robotics/rdk_LeRobot_tools) (`stable` / `s100` / `s600` branch READMEs + `doc/WORKFLOW_GUIDE_EN.md` + scripts), [D-Robotics/openpi_runtime](https://github.com/D-Robotics/openpi_runtime) (`develop` README), [huggingface.co/D-Robotics/openpi](https://huggingface.co/D-Robotics/openpi). Facts are taken verbatim from those sources; commands match the current repo state. Where branches differ, the difference is called out explicitly.
 
-## A. LeRobot ACT 完整流程
+## Contents
 
-### A.1 开发机环境(模型转换)
+- [A. LeRobot ACT — full flow](#a-lerobot-act--full-flow)
+  - [A.1 Pick the branch](#a1-pick-the-branch)
+  - [A.2 Dev-machine environment](#a2-dev-machine-environment)
+  - [A.3 Export ONNX + configs](#a3-export-onnx--configs)
+  - [A.4 Compile ONNX → .hbm](#a4-compile-onnx--hbm)
+  - [A.5 Board-side runtime (the Python-3.12 split)](#a5-board-side-runtime-the-python-312-split)
+  - [A.6 Run the control loop](#a6-run-the-control-loop)
+  - [A.7 Key files](#a7-key-files)
+- [B. Pi0 / openpi VLA (S600)](#b-pi0--openpi-vla-s600)
+  - [B.1 Data spec](#b1-data-spec)
+  - [B.2 Architecture, latency, smoothing](#b2-architecture-latency-smoothing)
+  - [B.3 Minimal run sheet](#b3-minimal-run-sheet)
+- [C. Related embodied repos](#c-related-embodied-repos)
 
-强烈建议用 D-Robotics fork 以保证兼容(已锁 `datasets` 版本,兼容 v2.1 数据集):
+---
+
+## A. LeRobot ACT — full flow
+
+### A.1 Pick the branch
+
+`rdk_LeRobot_tools` has diverged into branch-specific deployments. Choose by board and dataset vintage:
+
+| Branch | Target | LeRobot | `march` | Toolchain | Board runtime |
+| --- | --- | --- | --- | --- | --- |
+| `s100` | RDK S100, current | upstream HF **v0.5.2** | `nash-e` | OE **3.7.0** | C++ `bpu_runtime` ext (Py 3.12) |
+| `s600` | RDK S600, current | upstream HF **v0.5.2** | `nash-p` | OE **3.7.0** | `pip install hbm-runtime` |
+| `stable` | legacy, v2.1 datasets | **D-Robotics/lerobot fork** (locked `datasets`) | `nash-e` (S100) | OE Docker | `pip install hbm-runtime` |
+
+**The fork-vs-upstream rule reversed recently.** The current `s100`/`s600` branches state: *"Use the official Hugging Face LeRobot repository … Do not use the outdated `D-Robotics/lerobot` fork."* The fork is now **only** the legacy `stable` path. Do not carry the old "always use the fork" rule into current work.
+
+S100P shares the S100 Nash-e path. Only S100 (`nash-e`) and S600 (`nash-p`) are verified end-to-end; the export script contains a `bayes`/`bayes-e` (X5) branch, but a compilable `.bin` is not a verified arm deployment.
+
+### A.2 Dev-machine environment
+
+Current path (`s100` shown; swap `s100`→`s600` for S600):
 
 ```bash
-git clone https://github.com/D-Robotics/lerobot.git
-cd lerobot
-git clone https://github.com/D-Robotics/rdk_LeRobot_tools.git
-pip install -e ".[feetech]"
-pip install onnx onnxsim termcolor tqdm   # ONNX 导出依赖
-```
-
-用上游官方仓的替代方案(自担兼容风险):
-
-```bash
+conda activate lerobot
 git clone https://github.com/huggingface/lerobot.git
 cd lerobot
-git checkout 8cfab3882480bdde38e42d93a9752de5ed42cae2   # v2.1 对应 commit
+git clone https://github.com/D-Robotics/rdk_LeRobot_tools.git
+cd rdk_LeRobot_tools && git checkout s100 && cd ..
+pip install -e ".[feetech]"
+pip install onnx onnxsim termcolor tqdm safetensors
+```
+
+Verified env for the v0.5.2 branches: `datasets 4.8.5`, `torch 2.7.1+cu126`, `onnxruntime 1.26.0`, `onnx 1.21.0`, `numpy 2.2.6`.
+
+Legacy `stable` path (only if you must load v2.1 datasets):
+
+```bash
+git clone https://github.com/D-Robotics/lerobot.git   # fork, locked datasets
+cd lerobot
 git clone https://github.com/D-Robotics/rdk_LeRobot_tools.git
 pip install -e ".[feetech]"
-# 仍报兼容错时:pip install datasets==2.19.0
+pip install onnx onnxsim termcolor tqdm
+# Upstream alternative: git checkout 8cfab3882480bdde38e42d93a9752de5ed42cae2  (v2.1 commit),
+# and if compatibility errors appear: pip install datasets==2.19.0
 ```
 
-### A.2 导出 ONNX + 配置
+> Arm assembly, motor setup, `lerobot-calibrate` calibration, and `lerobot-record` data collection are **upstream LeRobot** — see [huggingface/lerobot](https://github.com/huggingface/lerobot) and the [SO-101 docs](https://huggingface.co/docs/lerobot/so101). This repo starts from a trained ACT checkpoint.
 
-编辑 `bpu_export_config.yaml`:
+### A.3 Export ONNX + configs
 
-| 字段 | 含义 |
-| --- | --- |
-| `dataset.root` | 训练所用数据集根目录(顶层字段) |
-| `act_path` | 训练好的 ACT checkpoint 目录(顶层字段;含 `config.json` + `model.safetensors`) |
-| `type` | **顶层字段**·BPU 芯片类型:`nash-e`/`nash-m`/`nash-p`(RDK S100/S100P);`bayes`/`bayes-e`(RDK X5)。脚本据此自动调编译参数。**勿与 `policy.type:"act"` 混淆**(那是策略类型,不是芯片) |
+There are **two distinct config files** in this workflow — do not confuse them:
 
-```bash
-python export_bpu_actpolicy.py --config bpu_export_config.yaml
-# 产出 bpu_export_output/:ONNX 模型、校准数据、build_all.sh
-```
-
-### A.3 编译 ONNX → BPU 模型
-
-- 在 D-Robotics **OpenExplorer Docker 工具链**(非板上)里执行生成的 `build_all.sh`。
-- S100/S100P(Nash)产物为 **`.hbm`**;X5(Bayes-e)为 `.bin`(脚本含真实 bayes 编译分支,但官方仅在 S100/S100P 验证过 ACT,X5/bayes 路径未充分验证——能编出 `.bin` ≠ X5 端到端可用,投入前先告知用户)。
-
-### A.4 板端部署与控制
-
-```bash
-# 1. 板端 LeRobot(D-Robotics fork,已锁 datasets)
-git clone https://github.com/D-Robotics/lerobot.git
-cd lerobot && pip install -e .
-# 2. 板端 BPU 推理库
-pip install hbm-runtime
-# 3. 加载编译好的 BPU 模型并控制机器人
-python bpu_control_robot.py --bpu-act-path ./bpu_output
-#   --bpu-act-path  BPU 模型目录(须含 .hbm 与 .npy)
-#   --fps           控制循环频率(默认 30Hz)
-#   --inference-time 自动运行时长(秒)
-# 默认连 so101 机器人;换臂改代码里的 make_robot("so101")
-```
-
-> 验证转换正确性:比对 `bpu_output` 里的 `new_actions.npy`(转换前 PyTorch 推理结果)与板端 BPU 输出。
-
-`rdk_LeRobot_tools` 关键文件:
-
-| 文件 | 运行位置 | 作用 |
+| Config file | Used by | Purpose |
 | --- | --- | --- |
-| `export_bpu_actpolicy.py` | 开发机/训练服务器 | PyTorch 权重 → ONNX + 编译配置/脚本 |
-| `bpu_export_config.yaml` | 开发机 | 导出配置 |
-| `bpu_control_robot.py` | RDK 板 | 加载 BPU 模型、控制机器人 |
-| `damo/` | — | DAMO 开发者矩阵·LeYun(乐云)具身智能开发平台适配(`damo/replace.py` 改 `folder_path` 后 `python damo/replace.py` 改键,再导出) |
+| `bpu_export_config.yaml` (s600: `bpu_export_config_s600_calfix.yaml`) | `export_bpu_actpolicy.py` | checkpoint, dataset, export path, `type` (`march`), `cal_num` |
+| `config_BPU_ACTPolicy_*.yaml` | OE `hb_compile` | ONNX path, calibration data, quantization/compile settings — **auto-generated**, you do not hand-edit it |
 
-> 边界:`stable` 分支当前**仅验证 ACT 模型 + RDK S100/S100P(+ SO-101 机械臂)**;v2.1 数据集兼容。README 写 S100、WORKFLOW_GUIDE 写 S100/S100P,以后者为准。更新版 LeRobot 需切对应分支。
+Export-stage YAML key fields:
 
-## B. VLA / Pi0(openpi_runtime)
-
-基于 Pi0 量化部署的视觉-语言-动作运行时,**跑在 RDK S600 板(Ubuntu 24.04 / ROS2 Jazzy)上**控制双臂机械臂(S600 是开发板,不是机械臂),client-server 架构。
-
-### B.1 数据规格
-
-| 项 | 形状 | 类型 | 说明 |
-| --- | --- | --- | --- |
-| 图像 ×3 | `[3,224,224]` | uint8 | 头部 / 左腕 / 右腕(右腕用黑图占位) |
-| 状态 | `[14]` | float32 | 左右臂各关节 + 夹爪 |
-| 指令 | — | string | 如 "put the yellow mango on the blue plate" |
-| 动作输出 | `[50,14]` | float32 | 50 步,每步左右臂各 6 关节 + 夹爪 |
-
-### B.2 架构与时延
-
-- 多相机 ROS2 话题**时间同步**(`TopicTimeSynchronizer`,100ms 窗)。
-- 流水线:数据采集 → 前处理 → 推理 → 后处理 → 执行,全链路监控。
-- Pi0 推理在 **server(OE-LLM)**;`piper_node` 控制机械臂;动作做插值(首步从当前状态插入、末步平滑收敛)+ 一阶低通滤波。
-
-| 阶段 | 平均时延 |
+| Field | Meaning |
 | --- | --- |
-| 数据采集 | 0.1ms |
-| 前处理 | 3.2ms |
-| 推理(server) | 192.5ms |
-| 后处理 | 0.1ms |
-
-### B.3 最小可跑清单(以官方 develop README 为准)
+| `dataset.root` | Root dir of the dataset used during training (used to fetch calibration batches and auto-detect cameras) |
+| `act_path` | Trained ACT checkpoint dir (`config.json` + `model.safetensors`) |
+| `type` | BPU chip = the `march`: `nash-e` (S100) / `nash-p` (S600) / `nash-m` (S100P); `bayes`/`bayes-e` (X5, unverified). The script picks compile params from this. **Not** the same as `policy.type: "act"` |
 
 ```bash
-# 1. 模型:从 huggingface.co/D-Robotics/openpi 取对应任务的 HBM 量化模型 + norm_stats.json
-#    (norm_stats.json 在 .../<task>/torch/assets/trossen/ 下,须与所用模型匹配)
-# 2. 环境(Python 3.12)
-conda create -n s600_pi0 python=3.12 && conda activate s600_pi0
-pip install -r resource/requirements.txt        # colcon build 见 README
-# 3. 启动顺序
-ros2 launch realsense2_camera rs_launch.py ...   # 头部 + 左腕相机
-python3 install/lib/openpi_runtime/piper_node ... --publish_topic /piper/qpos
-ros2 run ... s600_inference_node --ros-args \
-  -p norm_stats_path:=norm_stats.json -p num_steps:=1250   # num_steps 默认 1250
+python export_bpu_actpolicy.py --config bpu_export_config.yaml   # s600: ..._s600_calfix.yaml
 ```
 
-> 完整 colcon build、各节点参数、相机话题名以 [openpi_runtime](https://github.com/D-Robotics/openpi_runtime) develop README 为准;这里只给最小落地骨架。
+What the script does (6 steps): ① load checkpoint + dataset, auto-detect cameras; ② export normalization `.npy` (`{cam}_mean/std`, `action_mean/std`, `action_mean/std_unnormalize`) used for manual norm/denorm outside the BPU; ③ export **VisionEncoder** ONNX (backbone + `encoder_img_feat_input_proj`; output feature map `[1,512,15,20]`); ④ export **TransformerLayers** ONNX (encoder + decoder + action_head; output `Actions [1,100,6]`; also writes `new_actions.npy` for accuracy checking); ⑤ generate `config_BPU_ACTPolicy_*.yaml`, `build_*.sh`, and `build_all.sh` (`march: nash-*`, `norm_type: no_preprocess`); ⑥ assemble `export_path/`.
 
-## C. 相关具身生态仓
+ACT is split into two submodels because the BPU deploys them separately:
+`image → VisionEncoder → front_features`, then `state + front_features → TransformerLayers → Actions`. `bpu_control_robot.py` chains them on the board.
 
-| 仓库 | 用途 |
+Output tree:
+
+```text
+export_path/
+├── BPU_ACTPolicy_VisionEncoder/
+│   ├── BPU_ACTPolicy_VisionEncoder.onnx
+│   ├── config_BPU_ACTPolicy_VisionEncoder.yaml
+│   └── calibration_data_BPU_ACTPolicy_VisionEncoder/
+├── BPU_ACTPolicy_TransformerLayers/
+│   ├── BPU_ACTPolicy_TransformerLayers.onnx
+│   ├── config_BPU_ACTPolicy_TransformerLayers.yaml
+│   └── calibration_data_BPU_ACTPolicy_TransformerLayers/
+├── bpu_output/          # normalization .npy (final .hbm land here after compile)
+└── build_all.sh
+```
+
+> For v2.1-era exports on the legacy path, uncomment the `policy` and `dataset` sections in the export YAML to avoid missing-key errors (e.g. `policy.type`).
+
+### A.4 Compile ONNX → .hbm
+
+The OE toolchain only accepts ONNX (it does not read PyTorch checkpoints). Run **inside the OE 3.7.0 Docker on an x86 host — never on the board**:
+
+```bash
+cd export_path
+bash build_all.sh        # invokes hb_compile per submodel
+```
+
+Result: `bpu_output/` gains the compiled models and runtime params:
+
+```text
+bpu_output/
+├── BPU_ACTPolicy_TransformerLayers.hbm
+├── BPU_ACTPolicy_VisionEncoder.hbm
+├── action_mean.npy / action_std.npy
+├── action_mean_unnormalize.npy / action_std_unnormalize.npy
+├── camera1_mean.npy / camera1_std.npy   # camera names auto-detected (e.g. front)
+└── new_actions.npy                       # pre-conversion PyTorch output (accuracy check)
+```
+
+`scp` the whole `bpu_output/` folder to the board.
+
+### A.5 Board-side runtime (the Python-3.12 split)
+
+**s600 branch** — straightforward:
+
+```bash
+git clone https://github.com/huggingface/lerobot.git && cd lerobot
+git clone https://github.com/D-Robotics/rdk_LeRobot_tools.git
+cd rdk_LeRobot_tools && git checkout s600 && cd ..
+pip install -e ".[feetech]"
+pip install hbm-runtime
+```
+
+**s100 branch** — Python **3.12** + LeRobot v0.5.2, where the PyPI `hbm-runtime` wheel (built for Python 3.10) **cannot be imported**. The repo ships a `bpu_runtime/` pybind11 C++ module that wraps `hbDNN`/`hbUCP` and exposes `BPUACTRuntime` (a drop-in for `hbm_runtime.HB_HBMRuntime`):
+
+```bash
+# uv-based Python 3.12 venv
+curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH"
+cd ~ && git clone https://github.com/huggingface/lerobot.git && cd lerobot
+uv venv --python 3.12 .venv && source .venv/bin/activate
+git clone https://github.com/D-Robotics/rdk_LeRobot_tools.git
+cd rdk_LeRobot_tools && git checkout s100 && cd ..
+uv pip install -e ".[feetech]"
+uv pip install onnx onnxsim termcolor tqdm safetensors numpy
+# build the C++ BPU extension
+cd rdk_LeRobot_tools/bpu_runtime && uv pip install pybind11
+mkdir build && cd build
+cmake -DPython3_EXECUTABLE=$(which python) \
+      -Dpybind11_DIR=$(python -c "import pybind11; print(pybind11.get_cmake_dir())") ..
+make -j$(nproc)
+# produces bpu_act_runtime.cpython-312-aarch64-linux-gnu.so
+```
+
+`bpu_control_robot.py` auto-imports the built `.so`: it tries `hbm_runtime` first, falls back to the C++ extension if unavailable — no manual `PYTHONPATH`.
+
+### A.6 Run the control loop
+
+```bash
+python bpu_control_robot.py --bpu-act-path ./bpu_output
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--bpu-act-path` | (required) | BPU model dir; must contain `.hbm` + `.npy` |
+| `--fps` | `30` | control-loop frequency (Hz) |
+| `--inference-time` | `1000` | auto-run duration (seconds) |
+| `--robot-port` | `/dev/ttyACM0` | arm serial port |
+| `--camera-index` | `0` | camera device index |
+| `--camera-name` | `front` | must match a camera name baked into the model |
+| `--camera-width` / `--camera-height` | `640` / `480` | capture resolution |
+
+Default robot is `so101` (`make_robot("so101")` — edit the code to use another arm). **Verify correctness** by comparing the board's BPU output against `new_actions.npy` from the export step before trusting the arm.
+
+### A.7 Key files
+
+| File | Runs on | Role |
+| --- | --- | --- |
+| `export_bpu_actpolicy.py` | dev machine / training server | PyTorch weights → ONNX (2 submodels) + OE configs + `build_all.sh` |
+| `bpu_export_config.yaml` (s600: `bpu_export_config_s600_calfix.yaml`) | dev machine | export-stage config |
+| `config_BPU_ACTPolicy_*.yaml` | OE Docker | auto-generated `hb_compile` configs |
+| `bpu_runtime/` | RDK S100 board | C++ pybind11 BPU runtime (`BPUACTRuntime`) for Python 3.12 |
+| `bpu_control_robot.py` | RDK board | load `.hbm`, run control loop, drive the arm |
+| `damo/replace.py` | dev machine | DAMO Developer Matrix · LeYun dataset key remap (edit `folder_path`, then run; back up data first — it edits in place) |
+
+---
+
+## B. Pi0 / openpi VLA (S600)
+
+A Vision-Language-Action runtime based on quantized [Pi0](https://github.com/Physical-Intelligence/openpi), running on **RDK S600 (Ubuntu 24.04 / ROS2 Jazzy)** to drive a **dual-arm** setup. **Client-server architecture** (the S600 is the development board, not the arm itself).
+
+### B.1 Data spec
+
+| Item | Shape | Type | Notes |
+| --- | --- | --- | --- |
+| Images ×3 | `[3,224,224]` | uint8 | head / left wrist / right wrist (right wrist = black placeholder) |
+| State | `[14]` | float32 | both arms: joints + gripper |
+| Prompt | — | string | e.g. `"put the yellow mango on the blue plate"` |
+| Action output | `[50,14]` | float32 | 50 steps; each = [6 joints + gripper] per arm |
+
+### B.2 Architecture, latency, smoothing
+
+- **Client (S600 inference node, `s600_inference_node`):** time-synchronizes multi-camera ROS2 topics via `TopicTimeSynchronizer` (default `sync_time_window` = 0.1 s) → collect → preprocess → call server → smooth → execute.
+- **Server (Pi0 inference, OE-LLM):** predicts the action sequence; reached on **port 8888**.
+- **`piper_node`:** drives the arm over CAN (`can0`).
+
+| Stage | Avg latency |
 | --- | --- |
-| [rdk_LeRobot_tools](https://github.com/D-Robotics/rdk_LeRobot_tools) | LeRobot ACT → BPU 导出/部署工具 |
-| [lerobot](https://github.com/D-Robotics/lerobot) | D-Robotics fork,policy on BPU,锁版本 |
-| [openpi_runtime](https://github.com/D-Robotics/openpi_runtime) | Pi0 VLA 推理运行时(S600) |
-| [openpi](https://github.com/D-Robotics/openpi) | openpi + x86 server/训练配置 |
-| [RoboTwin](https://github.com/D-Robotics/RoboTwin) | 双臂仿真/数据 |
-| [embodied_ai_robots](https://github.com/D-Robotics/embodied_ai_robots) | 具身机器人示例 |
-| [Alicia-D-SDK](https://github.com/D-Robotics/Alicia-D-SDK) | 机械臂 SDK |
+| Data collection | 0.1 ms |
+| Preprocessing | 3.2 ms |
+| Inference (server) | 192.5 ms |
+| Postprocessing | 0.1 ms |
+| Action execution | ~700.5 ms (~68 ticks, ~1.36 s at 20 ms/step) |
 
-> S100 的 CPU(6×A78AE)/BPU(Nash)/MCU(4×R52+ 实时控制)三块异构算力分工、固件烧录、向板端 agent 交接任务,见 rdk-board-delegate。
+Action smoothing (three stages): 10-step linear interpolation from current state to `action[0]`; first-order low-pass on `action[1..48]` (`alpha=0.15`, `filtered = alpha*action + (1-alpha)*prev`); 10-step interpolation `action[48]→action[49]`. The gripper dimension bypasses filtering/interpolation and uses the inference output directly.
+
+### B.3 Minimal run sheet
+
+> Full `colcon build`, every node parameter, and exact camera topic names: see the [openpi_runtime](https://github.com/D-Robotics/openpi_runtime) `develop` README. This is the minimal skeleton.
+
+```bash
+# 1. Model: from huggingface.co/D-Robotics/openpi grab the task's HBM model + norm_stats.json
+#    (norm_stats.json is under <task>/torch/assets/trossen/ and must match the model)
+# 2. Env (Python 3.12)
+conda create -n s600_pi0 python=3.12 && conda activate s600_pi0
+pip install -r resource/requirements.txt
+colcon build --packages-select openpi_runtime
+# 3. Launch order (same ROS_DOMAIN_ID across all, e.g. 40):
+#    a) two D457 cameras (head + left wrist) via realsense2_camera rs_launch.py
+#    b) piper_node  (--subscribe_topic /aliciaD/action --publish_topic /piper/qpos --can_name can0)
+#    c) s600_inference_node
+python3 install/lib/openpi_runtime/s600_inference_node --ros-args \
+  -p norm_stats_path:=norm_stats.json \
+  -p action_topic:=/aliciaD/action \
+  -p qpos_topic:=/piper/qpos \
+  -p num_steps:=1250          # max control steps, default 1250
+```
+
+Published HBM models (Hugging Face): `put_the_box` (v0.1.0) and `pi0_put_the_yellow_mango_on_the_blue_plate` (v0.2.0), both `pi0_base` quantized to HBM; v0.2.1 adds a 10 fps mango variant (`10fps_pi0_put_the_yellow_mango_on_the_blue_plate`). Each task's `.hbm` lives under `<task>/s600_hbm/`; the matching `norm_stats.json` under `<task>/torch/assets/trossen/`.
+
+Common failures: no observation data → check camera nodes + matching `ROS_DOMAIN_ID` + topic names; inference connect fail → Pi0 server not up / port 8888 busy / wrong `norm_stats.json` path; jerky execution → network latency, CAN health, tune `sync_time_window`.
+
+---
+
+## C. Related embodied repos
+
+| Repo | Use |
+| --- | --- |
+| [rdk_LeRobot_tools](https://github.com/D-Robotics/rdk_LeRobot_tools) | ACT → BPU export/deploy (branches: `stable`/`s100`/`s600`) |
+| [lerobot](https://github.com/D-Robotics/lerobot) | D-Robotics fork (locked `datasets`) — legacy `stable` path only |
+| [huggingface/lerobot](https://github.com/huggingface/lerobot) | Upstream LeRobot v0.5.2 — current path; also arm assembly/calibration/data collection |
+| [openpi_runtime](https://github.com/D-Robotics/openpi_runtime) | Pi0 VLA runtime (S600, `develop`) |
+| [openpi](https://github.com/D-Robotics/openpi) | openpi + x86 server / training config |
+| [Physical-Intelligence/openpi](https://github.com/Physical-Intelligence/openpi) | Upstream Pi0 |
+| [RoboTwin](https://github.com/D-Robotics/RoboTwin) | dual-arm simulation / data |
+| [embodied_ai_robots](https://github.com/D-Robotics/embodied_ai_robots) | embodied robot examples |
+| [Alicia-D-SDK](https://github.com/D-Robotics/Alicia-D-SDK) | robot arm SDK |
+
+> S100's CPU (6×A78AE) / BPU (Nash) / MCU (4×R52+ real-time control) heterogeneous split, firmware burn, and board-agent task handoff: see `rdk-board-delegate`.

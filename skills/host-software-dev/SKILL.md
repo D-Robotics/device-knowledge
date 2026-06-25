@@ -1,80 +1,106 @@
 ---
 name: host-software-dev
-description: 当开发 RDK Studio 桌面客户端本体(Electron/React/Vite/Node.js/TypeScript 工程、打包、IPC、HMR 等前端与桌面工程问题)时使用,区别于板端 RDK 设备知识。
+description: Host-side (x86 PC) software/tooling for RDK dev — the RDK Studio desktop client (install/login/flash/connect/CLI), the x86 Docker BPU toolchain that produces .bin/.hbm, the host flashing tools (RDK Studio/Rufus for X-series SD, Xburn for S-series USB), AND the Electron/React/Vite/Node/TypeScript engineering of building RDK Studio itself. Use whenever the work happens ON THE PC rather than on the board — installing or driving RDK Studio, choosing a flasher, setting up the toolchain Docker, or fixing a desktop-app build/IPC/HMR/packaging issue. 触发词:RDK Studio、studio 安装、烧录工具、Rufus、Xburn、烧录系统、Type-C 直连、rdkstudio 命令行、dmoss-agent、工具链 docker、x86 转换环境、Electron、preload、IPC、Vite、HMR、tsc 报错、打包签名。Routing — running things ON the board (first boot, on-board inference, camera) → rdk-device; the .pt→.bin/.hbm conversion commands → rdk-device/rdk-model-zoo; board error-code lookup → rdk-board-knowledge.
 ---
 
-# RDK Studio 桌面端开发
+# RDK Host Software & Tooling
 
-> 来源:整理自 D-Robotics RDK 官方文档、工具链与社区实践,逐条保留出处链接;由 device-knowledge 知识库忠实转换而来,未改写技术事实。
+Everything a user does **on the x86 PC** to develop for RDK: drive the **RDK Studio** desktop client, flash a board, set up the **Docker BPU toolchain**, or — if you are building Studio itself — fix its Electron/React/Vite/Node engineering. The single most important reflex: **decide whether the task runs on the PC (this skill) or on the board (rdk-device) before answering.**
 
-面向 RDK Studio 桌面客户端本体的前端/桌面工程知识(非板端设备操作)。
+> Sources: official `rdk_studio_doc` (product intro, quick-start, CLI), `rdk_doc` install_os & toolchain chapters, `rdk_s_doc` Xburn flashing, plus framework docs (Electron, Vite, TypeScript, Node). Every non-trivial claim is verified against these; nothing is invented.
 
-## Host software ecosystem
-- Desktop and frontend work usually spans browser runtimes, Electron main/preload/renderer processes, Node backends, Vite dev/build tooling, and TypeScript static analysis.
-- Keep runtime boundaries explicit: browser/renderer code is not Node code; preload bridges should be narrow, typed, and reviewed as security boundaries.
-- Use official framework documentation for contracts first, then local source, package versions, logs, and tests to resolve the project-specific behavior.
+## The one distinction that matters most
 
-**Host software runtime boundaries**:
-- First identify where code runs: browser, Electron main process, preload script, renderer, Node backend, build tool, or test runner.
-- Do not use Node APIs from a browser/renderer path unless the app intentionally exposes a narrow preload bridge.
-- Treat Vite dev server behavior, TypeScript typechecking, Electron packaging, and backend runtime behavior as separate failure surfaces.
-- Prefer official framework docs for runtime contracts before changing bundler aliases, sandbox flags, or TypeScript module settings.
+**Host vs. board.** The PC runs RDK Studio, the flasher, and the model-conversion Docker. The board runs the OS, the runtime (`hobot_dnn`/`hbm_runtime`), and the camera. Two hard rules that follow:
 
-**Desktop/frontend debugging loop**:
-- Reproduce the smallest failing path, then collect the exact console, terminal, and build error from the layer that failed.
-- For Electron, check main-process logs, preload exposure, renderer console, and registered IPC handlers separately.
-- For React/Vite, separate render bugs from dev-server/HMR bugs; Vite transforms TypeScript but does not replace `tsc --noEmit`.
-- For packaging/signing, verify local build output first, then signing identity, certificate variables, entitlements, and notarization credentials.
+- ✅ Model conversion (`hb_mapper` / `hb_compile`) runs **only on an x86 Linux host inside Docker** — never on the board.
+- ❌ RDK Studio's **desktop client ships only for Windows 10/11 (64-bit) and macOS Apple-Silicon** — there is **no** Intel-Mac, 32-bit Windows, or Linux desktop installer. For Linux/CI, use the `rdkstudio` / `dmoss-agent` CLI instead.
 
-**Electron IPC contract**:
-1. Register `ipcMain.handle(channel, handler)` in the main process before any renderer calls `ipcRenderer.invoke(channel, ...)`.
-2. Expose only a typed, minimal API through `contextBridge.exposeInMainWorld`; never expose raw `ipcRenderer` or unrestricted channel names.
-3. Validate payloads on the main-process boundary and return serializable values only.
-4. Keep channel names centralized so preload, renderer, and main process cannot drift silently.
+## Host-task cheat-sheet
 
-**Frontend build contract**:
-1. Run the narrow command that matches the failure: `tsc --noEmit` for types, `vite --host` or `npm run dev` for dev server, production build for bundling, and package build for Electron artifacts.
-2. Confirm the active Node version, package manager lockfile, workspace root, and resolved package version before changing source.
-3. Vite client env variables must use the project-defined public prefix, commonly `VITE_`; secrets stay in backend/main-process code.
-4. Fix TypeScript errors at the declaration or call boundary; avoid hiding contract problems with unchecked casts.
+| User wants to… | Host tool | Key fact |
+|---|---|---|
+| Install RDK Studio | `.exe` (Win 10/11 64-bit) or `.dmg` (macOS Apple Silicon) | No Intel-Mac / Linux / 32-bit build; download from `developer.d-robotics.cc/rdkstudio` |
+| Flash X3 / X5 (SD) | RDK Studio flasher **or** Rufus | Writes `.img` to a ≥16 GB Micro SD; X5 eMMC variants have an eMMC flow |
+| Flash S100 / S600 (USB) | **Xburn** (Win/macOS/Linux) | USB DFU+Fastboot (bricked/blank) or Fastboot (re-flash); Win needs the `sunrise5_winusb` driver |
+| Connect a board with no LAN IP | RDK Studio **Type-C 直连** | Device side `192.168.128.10`; full-function Type-C cable; default `root/root` |
+| Convert `.pt`/`.onnx` → `.bin` (X3/X5/Ultra) | `hb_mapper` in OpenExplorer Docker | Host: Ubuntu 20.04, ≥16 GB RAM, Docker 19.03+; GPU optional. X5 image `..._x5_*`, X3 image `..._x3j5_*` |
+| Convert → `.hbm` (S100/S100P/S600) | `hb_compile` in OpenExplorer Docker | Host Docker `ai_toolchain_ubuntu_22_s100_s600_*` |
+| Script Studio without the GUI | `rdkstudio` CLI / `dmoss-agent` (`@dmoss/agent`) | Enable `rdkstudio` from *配置中心 → 应用与更新*; `dmoss-agent` is the standalone NPM pkg for CI/Docker |
+| Build / debug RDK Studio itself | Electron + React + Vite + Node/TS | See **Workflow 4** and `references/desktop-app-engineering.md` |
 
-## 常用命令
+## Workflows
 
-| 命令模式 | 说明 | 风险 | 适用范围 |
-| --- | --- | --- | --- |
-| `(npm\|pnpm\|yarn)\s+run\s+dev\|\bvite\b` | Run or inspect a Vite development server | safe | 通用 |
-| `\btsc\b.*(--noEmit\|-p\s+[^\s]+)\|run\s+typecheck` | Run TypeScript compiler diagnostics | safe | 通用 |
-| `electron-builder\|electron-builder\s+--(mac\|win\|linux\|publish)` | Build or sign Electron desktop artifacts | moderate | 通用 |
+### Workflow 1 — Install & first-run RDK Studio (PC onboarding)
 
-## 常见故障
+**Use when:** "怎么安装 RDK Studio", "studio 打不开", "第一次用 studio".
 
-- 匹配 `require is not defined|Cannot find module .+ in preload|process is not defined|module is not defined` → Preload/renderer sandbox mismatch. Keep Node-only code in the main process or preload, expose a narrow API through `contextBridge`, and verify the preload path is loaded by the BrowserWindow configuration. (<https://www.electronjs.org/docs/latest/tutorial/tutorial-preload>)
-- 匹配 `No handler registered|Error invoking remote method|Unable to deserialize cloned data|An object could not be cloned` → IPC contract drift. Confirm `ipcMain.handle` is registered before renderer invoke, channel names match exactly, and payload/return values are structured-clone serializable. (<https://www.electronjs.org/docs/latest/tutorial/ipc>)
-- 匹配 `\[vite\].*(failed to connect|hmr)|WebSocket connection.*(failed|closed)|hmr update.*failed` → Vite HMR WebSocket failure. Check dev-server host/port, reverse proxy or Electron renderer origin, `server.hmr` settings, and browser console network errors before changing React state code. (<https://vite.dev/guide/features.html#hot-module-replacement>)
-- 匹配 `TS(2322|2307|2741|7006)|Type .+ is not assignable|Cannot find module .+ or its corresponding type declarations` → TypeScript contract failure. Run `tsc --noEmit -p <tsconfig>` at the package boundary, inspect the first real diagnostic, and fix declarations/import paths rather than relying on unchecked casts. (<https://www.typescriptlang.org/docs/handbook/compiler-options.html>)
-- 匹配 `TS18003|No inputs were found in config file` → tsconfig 未匹配到任何输入文件(**配置错误,非类型错误**)。检查 `include`/`files` 路径与 glob、`rootDir`/工作区根是否能命中 `.ts` 源,而非去改类型声明或 import。 (<https://www.typescriptlang.org/tsconfig/#include>)
-- 匹配 `CSC_LINK|No identity found|codesign.*(failed|exited)|The specified item could not be found in the keychain|notarization.*failed|Developer ID Application` → Packaging signing failure. Verify certificate/keychain access or CI signing variables, confirm unsigned packaging works first, then check electron-builder signing and notarization configuration for the target OS. (<https://www.electron.build/code-signing.html>)
-- 匹配 `EADDRINUSE|listen EADDRINUSE|address already in use|port\s+\d+\s+is\s+already\s+in\s+use` → Dev-server/HTTP port is already held — usually a leftover process from a previous run, not a code bug. Find the holder (`lsof -nP -iTCP:<port> -sTCP:LISTEN` on macOS/Linux, `netstat -ano | findstr :<port>` on Windows), stop it, then restart; or start on a different port. Confirm the port is free before assuming the new server bound. (<https://nodejs.org/api/errors.html#common-system-errors>)
-- 匹配 `ERR_MODULE_NOT_FOUND|Cannot find module .+ imported from|ERR_UNSUPPORTED_DIR_IMPORT|Did you mean to import .+\.js` → Runtime ESM resolution failure (distinct from a TypeScript compile error). In "type":"module" / NodeNext projects, relative imports need an explicit ".js" extension even from .ts sources, directory imports need an explicit index file, and the path/case must match on disk. Fix the import specifier rather than switching module systems or adding casts. (<https://nodejs.org/api/esm.html#mandatory-file-extensions>)
+1. **Download** the right installer from `https://developer.d-robotics.cc/rdkstudio` — `.exe` for Windows 10/11 64-bit, `.dmg` for macOS Apple Silicon. **If the user is on Intel Mac, Linux, or 32-bit Windows, stop** — there is no desktop build; route them to the CLI.
+2. **First launch** opens the D-Robotics unified SSO login. Studio stores only the login *state*, never the password.
+3. **Four-step onboarding:** 选择开发板 (X3/X5/S100) → 准备系统 (flash or skip) → 添加设备 (SSH / Type-C / serial-log) → 开始使用 Moss. The onboarding can be skipped if the board already boots.
+4. Re-opening restores device list, model config, skills, local-model state, and chat history. If login is broken, *设置 → 账户与安全* → sign out and back in.
 
-## 官方资料
+### Workflow 2 — Flash a board from the PC
 
-- [Electron Process Model](https://www.electronjs.org/docs/latest/tutorial/process-model)
-- [Electron Preload Scripts](https://www.electronjs.org/docs/latest/tutorial/tutorial-preload)
-- [Electron contextBridge API](https://www.electronjs.org/docs/latest/api/context-bridge)
-- [Electron Inter-Process Communication](https://www.electronjs.org/docs/latest/tutorial/ipc)
-- [electron-builder Code Signing](https://www.electron.build/code-signing.html)
-- [React Learn](https://react.dev/learn)
-- [React Hooks Reference](https://react.dev/reference/react/hooks)
-- [React DOM createRoot](https://react.dev/reference/react-dom/client/createRoot)
-- [Vite Getting Started](https://vite.dev/guide/)
-- [Vite Hot Module Replacement](https://vite.dev/guide/features.html#hot-module-replacement)
-- [Vite TypeScript Support](https://vite.dev/guide/features.html#typescript)
-- [Vite Env Variables and Modes](https://vite.dev/guide/env-and-mode)
-- [TypeScript Compiler Options](https://www.typescriptlang.org/docs/handbook/compiler-options.html)
-- [TSConfig Reference](https://www.typescriptlang.org/tsconfig/)
-- [TypeScript Everyday Types](https://www.typescriptlang.org/docs/handbook/2/everyday-types.html)
-- [Node.js HTTP API](https://nodejs.org/api/http.html)
-- [Node.js Streams API](https://nodejs.org/api/stream.html)
-- [Node.js child_process API](https://nodejs.org/api/child_process.html)
-- [Node.js Test Runner](https://nodejs.org/api/test.html)
+**Use when:** "烧录系统", "用什么工具刷机", "Rufus", "Xburn", "刷不进去".
+
+1. **Pick the flasher by board family — they are different tools:**
+   - **X3 / X5 (SD card):** **RDK Studio** flasher (online or local image, Win+macOS, single-card) **or Rufus** (Windows, local image). Need a ≥16 GB Micro SD + reader. X5 eMMC variants have a separate eMMC flow.
+   - **S100 / S100P / S600 (USB):** **Xburn** over a Type-C data cable. Two modes — **DFU+Fastboot** for a blank/bricked board (set boot mode to `dfu`), **Fastboot** for a normal re-flash (board reaches `uboot`). On Windows install the `sunrise5_winusb` driver first; serial console is 921600 baud.
+2. **Get the image** from `archive.d-robotics.cc/downloads/os_images/...` (X-series) — choose `server` (headless) or `desktop`. S-series uses official firmware packages.
+3. **Inside RDK Studio** the flash wizard is 4 steps: 选择设备 → 选择镜像 → 开始烧录 → 完成. TF-card writes offer 稳定模式 (default, low CPU) vs 高速模式 (faster, heavier).
+4. **Never** unplug the card / Type-C cable, sleep, or force-quit Studio mid-write; flashing **erases** the target — confirm it is not the system disk.
+
+### Workflow 3 — Set up the host BPU toolchain (Docker)
+
+**Use when:** "工具链 docker 怎么装", "x86 转换环境", "hb_mapper 在哪跑", "转换环境要求".
+
+1. **The toolchain is host-only, in Docker.** Never `apt install hb_mapper` on the board.
+2. **Host requirements (X-series OpenExplorer):** CPU i3+ / E3/E5, **≥16 GB RAM**, **Ubuntu 20.04**, **Docker 19.03+**. GPU is optional (CUDA 11.6, driver ≥510.39.01) — a CPU-only host converts models fine; add NVIDIA Container Toolkit (1.13.5) only for GPU.
+3. **Add the user to the docker group** so root is not required: `sudo groupadd docker && sudo gpasswd -a ${USER} docker && sudo service docker restart`.
+4. **Pull & run the image** matching the board — **X5** uses `openexplorer/ai_toolchain_ubuntu_20_x5_*`, **X3** uses `openexplorer/ai_toolchain_ubuntu_20_x3j5_*`, **S-series** uses `ai_toolchain_ubuntu_22_s100_s600_*`. Mount the project and enlarge shared memory: `docker run -it --rm --shm-size=15g -v "$(pwd)":/open_explorer <image>`.
+5. The **conversion commands themselves** (`hb_mapper checker/makertbin`, `hb_compile`, config.yaml, calibration, `march` values) belong to **rdk-device** → see `references/toolchain-host-setup.md` for the host-side scaffolding and the cross-link.
+
+### Workflow 4 — Build / debug RDK Studio the desktop app (for Studio engineers)
+
+**Use when:** the user is editing RDK Studio's own source — Electron main/preload/renderer, React/Vite UI, Node backend, packaging.
+
+1. **Locate where the code runs first:** browser/renderer, Electron main, preload, Node backend, or build tool. A bug in one layer is not a bug in another. Node APIs must not be reached from the renderer except through a narrow `contextBridge` preload.
+2. **Run the narrow command that matches the failure** — `tsc --noEmit` for types, `vite`/`npm run dev` for the dev server, the production build for bundling, `electron-builder` for packaging.
+3. **IPC contract:** register `ipcMain.handle(channel, ...)` before any renderer `invoke`; expose only a typed minimal API via `contextBridge`; return structured-clone-serializable values; centralize channel names.
+4. **Full troubleshooting table** (preload sandbox, IPC drift, Vite HMR, TS errors, ESM resolution, signing, port-in-use) lives in `references/desktop-app-engineering.md`.
+
+## Worked examples
+
+**Example 1 — "我电脑是 Intel 的 MacBook，怎么装 RDK Studio？"**
+*"RDK Studio 的桌面客户端目前只发 Windows 10/11 64 位（`.exe`）和 Apple Silicon Mac（`.dmg`），**没有 Intel Mac 安装包**，所以你这台装不了桌面端。两条路:在一台 Win/Apple-Silicon 机器上跑桌面端;或在 Intel/Linux 上用命令行 `rdkstudio` / `dmoss-agent`(`@dmoss/agent`)做设备、文件、对话这些脚本化任务。"* Don't invent an Intel build.
+
+**Example 2 — "S100 怎么刷系统?用 Rufus 吗?"**
+*"S 系列不用 Rufus。Rufus / RDK Studio 是给 X3/X5 写 SD 卡的;S100/S600 走 USB 的 **Xburn** 工具(Win/macOS/Linux 都有)。空板或变砖用 DFU+Fastboot 模式(板子进 `dfu`),正常重刷用 Fastboot 模式。Windows 上先装 `sunrise5_winusb` 驱动,串口 921600。"* Then point to Workflow 2.
+
+**Example 3 — "在哪台机器上跑 hb_mapper 把模型转成 bin?"**
+*"在 x86 Linux 开发机的 Docker 里,不是在板子上。最低要求:Ubuntu 20.04、内存 ≥16G、Docker 19.03+;GPU 可选,CPU 机器也能转。拉 X5 镜像 `openexplorer/ai_toolchain_ubuntu_20_x5_*`(X3 是 `..._x3j5_*`),`--shm-size=15g` 挂载工程目录进容器再跑 `hb_mapper`。转换命令本身和 march 取值看 rdk-device。"* (Host setup here; conversion command detail → rdk-device.)
+
+**Example 4 — "RDK Studio 里 preload 报 `require is not defined` 怎么办?"** (Studio engineer)
+*"这是 preload/renderer 的 sandbox 边界问题,不是业务 bug。Node-only 代码留在 main 或 preload,用 `contextBridge.exposeInMainWorld` 暴露一个窄接口给 renderer,别在 renderer 直接 `require`;再确认 `BrowserWindow` 的 `webPreferences.preload` 真的指向了这个 preload 文件。"* See `references/desktop-app-engineering.md`.
+
+## Common pitfalls
+
+| ❌ Don't | ✅ Do |
+|---|---|
+| Look for an Intel-Mac / Linux RDK Studio installer | Use Win10/11-64 or Apple-Silicon desktop, else the CLI |
+| Tell an S-series user to flash with Rufus / SD | Use **Xburn** over USB (DFU+Fastboot / Fastboot) |
+| `apt install hb_mapper` on the board | Run the toolchain in x86 Docker on the host |
+| Assume the toolchain needs a GPU | A CPU-only host (Ubuntu 20.04, 16 GB, Docker 19.03+) converts fine |
+| `require()` Node APIs in the renderer | Bridge a narrow typed API via `contextBridge` preload |
+| Treat a `tsc` error and a Vite-HMR error as the same surface | Run the command that matches the failing layer |
+| Confuse Type-C direct address with the board mgmt port | Type-C gadget = `192.168.128.10`; S-series `eth1` mgmt = `192.168.127.10` |
+
+## Reference map
+
+| Read this | When |
+|---|---|
+| [rdk-studio-client.md](references/rdk-studio-client.md) | Driving the Studio desktop client — install matrix, SSO login, onboarding, flash wizard, Type-C/SSH/serial connect, `rdkstudio`/`dmoss-agent` CLI |
+| [host-flashing.md](references/host-flashing.md) | Choosing & using a flasher — RDK Studio / Rufus (X-series SD) vs Xburn (S-series USB), images, drivers, modes, safety |
+| [toolchain-host-setup.md](references/toolchain-host-setup.md) | Setting up the x86 Docker conversion environment — host specs, Docker images, run flags, docker-group; cross-link to rdk-device for the conversion commands |
+| [desktop-app-engineering.md](references/desktop-app-engineering.md) | Building RDK Studio itself — Electron process model, preload/IPC, Vite/HMR, TypeScript, ESM, packaging/signing, and the error→cause table |

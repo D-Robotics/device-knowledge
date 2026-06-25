@@ -1,0 +1,66 @@
+{
+  "skill_name": "rdk-ros",
+  "description": "Test prompts that verify rdk-ros triggers and produces correct, board-aware TROS/ROS2 guidance. Prompts are written the way a real RDK developer would phrase them (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "s600-jazzy-not-humble",
+      "prompt": "我在 RDK S600 上 source /opt/tros/humble/setup.bash 说路径不存在,怎么回事?",
+      "expected_output": "Explains S600 is Ubuntu 24.04 / ROS2 Jazzy, so the path is /opt/tros/jazzy, not humble.",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "States S600 runs ROS2 Jazzy (Ubuntu 24.04), not Humble." },
+        { "id": "1b", "text": "Gives the correct path source /opt/tros/jazzy/setup.bash." },
+        { "id": "1c", "text": "Does NOT tell the user to install or look for a humble path on S600." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "gesture-node-cascade",
+      "prompt": "我想在 X5 上做手势控制,该用哪个 TROS 节点?",
+      "expected_output": "Names the body->hand-keypoint->gesture cascade (or the gesture_control app), with X5 supported.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "Identifies it as a cascade: mono2d_body_detection -> hand_lmk_detection -> hand_gesture_detection (or names the gesture_control app)." },
+        { "id": "2b", "text": "Confirms these run on X3/X5 (X-series), not an S-series-only node." },
+        { "id": "2c", "text": "Mentions the upstream/downstream topic flow (e.g. /hobot_mono2d_body_detection or /hobot_hand_lmk_detection) or gives the launch commands." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "ros2-not-found",
+      "prompt": "板子上敲 ros2 命令提示 command not found,是不是 TROS 没装好?",
+      "expected_output": "Says it is almost always an unsourced environment, not a broken install; source first (humble or jazzy), try sunrise user.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Says ros2 not found is almost always a missing source, not a broken install." },
+        { "id": "3b", "text": "Tells the user to source the TROS setup (humble path, or jazzy on S600)." },
+        { "id": "3c", "text": "Mentions trying the sunrise user (su - sunrise) if root still cannot find ros2 on S100/S600." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "yolo-node-launch",
+      "prompt": "X5 上想直接跑个 YOLO 检测节点看效果,用什么命令?",
+      "expected_output": "dnn_node_example with a yolo config, switch versions via dnn_example_config_file; input /hbmem_img.",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "Uses dnn_node_example with a YOLO config (dnn_example_config_file:=config/yolov5workconfig.json or similar)." },
+        { "id": "4b", "text": "Mentions switching YOLO versions via dnn_example_config_file rather than a different package." },
+        { "id": "4c", "text": "Notes board-dependent version support (e.g. X5 supports more versions; S600 only v2/v3/v5) OR the input/output topics (/hbmem_img -> hobot_dnn_detection)." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "stereonet-bad-depth",
+      "prompt": "跑 hobot_stereonet 出来的深度图全是噪点,很差,怎么排查?",
+      "expected_output": "Points to missing stereo calibration and/or left-right timestamp skew > 30ms; confirm /image_combine_raw input.",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "Mentions stereo calibration must be done first (left/right/extrinsics yaml)." },
+        { "id": "5b", "text": "Mentions left-right timestamp skew (>30ms) degrades disparity, suggesting hardware trigger or PTP sync." },
+        { "id": "5c", "text": "References the combined input topic /image_combine_raw or the output depth topic /StereoNetNode/stereonet_depth (a.k.a. ~/stereonet_depth)." }
+      ]
+    }
+  ]
+}
