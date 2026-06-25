@@ -174,7 +174,7 @@ X 系列走 `rdk_x_doc`,S 系列走 `rdk_s_doc`,TROS 走 `tros_doc`,Studio 走 `
 | 工作台 / AI 对话 / 远程终端 / 文件管理 / 远程 IDE / 远程桌面 / 系统烧录 / 网络配置 / 设备管理 — `docs/3-user-guide/*`⚠️ |
 | **OpenClaw**(概览/部署卸载/主面板/与 dMoss 协作/任务委派/配对安全)— `docs/3-user-guide/10-openclaw/*` → `user-guide/openclaw/overview`⚠️ |
 | **Skill**(SKILL.md 结构/内置 skill/ClawHub 社区/创建导入/触发匹配/同步到板)— `docs/3-user-guide/11-skill/*` → `user-guide/skill/skill-md-structure`⚠️ |
-| 本地模型 / 飞书·微信 渠道 / 配置中心 / 监控(任务队列·token)/ CLI(rdkstudio·dmoss-agent)— `docs/3-user-guide/{12,13,14,15}-*`⚠️ |
+| 本地模型 / 飞书·微信 渠道 / 配置中心 / 监控(任务队列·token)/ CLI(rdkstudio·moss-agent)— `docs/3-user-guide/{12,13,14,15}-*`⚠️ |
 | 资源:分享/获取 Skill、NodeHub 案例 — `docs/4-resources/*` → `resources/get-skills`⚠️ |
 | [FAQ:.hbm 模型无法加载](https://developer.d-robotics.cc/rdk_studio_doc/faq/hbm-not-found) ✅实测 |
 | FAQ 其它(AI 无响应/SSH 失败/TypeC 烧录失败/相机无画面/OpenClaw 安装失败/配网失败/IDE 失败/多设备/token 异常/模型质量/VNC/本地 LLM/串口空)— `docs/5-faq/*.md` → `faq/ssh-failed` 等⚠️ |
