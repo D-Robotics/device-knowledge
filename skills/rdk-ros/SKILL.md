@@ -117,4 +117,4 @@ Two usual causes: (1) the stereo pair was never calibrated → generate `left/ri
 | [app-cases.md](references/app-cases.md) | Building the full official AMR or line-follower robot end to end (hardware list → calibration → mapping/nav, or collect → train → quantize → on-board inference) |
 | [hardware-notes.md](references/hardware-notes.md) | Deep dives: TROS env layout, hobot_stereonet calibration, Livox lidar networking |
 | `scripts/tros_env.py` | Quick board → ROS2 distro / setup path / apt prefix / model artifact lookup |
-| `scripts/tros_check.sh` | Live TROS/ROS2 environment probe — detects `/opt/tros/humble/` vs `/opt/tros/jazzy/`, sources in subshell, verifies `ros2` availability + counts installed packages (structured JSON; non-board → `{"error":"not_on_board"}`) |
+| `scripts/tros_check.sh` | Live TROS/ROS2 environment probe — detects `/opt/tros/humble/` vs `/opt/tros/jazzy/`, sources in subshell, verifies `ros2` availability + counts installed packages (structured JSON `{ok,off_platform,reason,fields}`; non-board → `{"ok":false,"off_platform":true,"reason":"not_on_rdk_board","fields":null}`; board-but-no-TROS → reason="TROS not installed") |

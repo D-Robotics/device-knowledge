@@ -5,9 +5,8 @@
 # connectivity — so the agent can verify "is the network up / what's the
 # current CPU mode" without guessing.
 #
-# Output: JSON {"interfaces":[...], "config_txt_exists":true|false,
-#                "cpu_governor":"...", "gateway_reachable":true|false}
-# Non-board environment: {"error":"not_on_board"}
+# Output: JSON {"ok":true,"off_platform":false,"reason":"","fields":{"interfaces":[...],"config_txt_exists":...,"cpu_governor":"...","gateway_reachable":...}}
+# Non-board: {"ok":false,"off_platform":true,"reason":"not_on_rdk_board: /sys/class/socinfo not found","fields":null}
 #
 # Principles: read-only (no config writes); ping limited to 1 packet 1s timeout;
 # idempotent; bash-only.
@@ -17,7 +16,7 @@ set -euo pipefail
 
 # --- Check if we're on an RDK board ---
 if [ ! -d /sys/class/socinfo ]; then
-    echo '{"error":"not_on_board"}'
+    echo '{"ok":false,"off_platform":true,"reason":"not_on_rdk_board: /sys/class/socinfo not found","fields":null}'
     exit 0
 fi
 
@@ -55,10 +54,10 @@ if [ -n "$gateway_ip" ]; then
     fi
 fi
 
-# --- Emit JSON ---
-echo "{"
+# --- Emit JSON (contract: ok/off_platform/reason/fields) ---
+echo '{"ok":true,"off_platform":false,"reason":"","fields":{'
 echo "  \"interfaces\": [${interfaces}],"
 echo "  \"config_txt_exists\": ${config_txt_exists},"
 echo "  \"cpu_governor\": \"${cpu_governor}\","
 echo "  \"gateway_reachable\": ${gateway_reachable}"
-echo "}"
+echo '}}'

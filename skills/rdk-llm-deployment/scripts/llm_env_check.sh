@@ -5,9 +5,8 @@
 # the board can run an on-device LLM and which stack matches — so the agent
 # doesn't recommend the wrong stack (e.g. hobot_llamacpp on S600).
 #
-# Output: JSON {"board_id":"...", "mem_total":"...", "llm_packages":[...],
-#                "recommended_stack":"..."}
-# Non-board environment: {"error":"not_on_board"}
+# Output: JSON {"ok":true,"off_platform":false,"reason":"","fields":{"board_id":"...","mem_total":"...","llm_packages":[...],"recommended_stack":"..."}}
+# Non-board: {"ok":false,"off_platform":true,"reason":"not_on_rdk_board: /sys/class/socinfo not found","fields":null}
 #
 # Principles: read-only; idempotent; non-board graceful degradation; bash-only.
 # Usage: bash llm_env_check.sh
@@ -16,7 +15,7 @@ set -euo pipefail
 
 # --- Check if we're on an RDK board ---
 if [ ! -d /sys/class/socinfo ]; then
-    echo '{"error":"not_on_board"}'
+    echo '{"ok":false,"off_platform":true,"reason":"not_on_rdk_board: /sys/class/socinfo not found","fields":null}'
     exit 0
 fi
 
@@ -60,10 +59,10 @@ case "$board_id" in
     *)           recommended_stack="unknown_board" ;;
 esac
 
-# --- Emit JSON ---
-echo "{"
+# --- Emit JSON (contract: ok/off_platform/reason/fields) ---
+echo '{"ok":true,"off_platform":false,"reason":"","fields":{'
 echo "  \"board_id\": \"${board_id}\","
 echo "  \"mem_total\": \"${mem_total}\","
 echo "  \"llm_packages\": [${llm_packages}],"
 echo "  \"recommended_stack\": \"${recommended_stack}\""
-echo "}"
+echo '}}'

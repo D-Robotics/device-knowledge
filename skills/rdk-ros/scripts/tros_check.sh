@@ -5,9 +5,9 @@
 # is available after sourcing, and counts installed packages — so the agent
 # knows the environment is ready before advising launch commands.
 #
-# Output: JSON {"tros_distro":"humble|jazzy|none", "setup_path":"...",
-#                "ros2_available":true|false, "packages_installed":N}
-# Non-board environment: {"error":"not_on_board"}
+# Output: JSON {"ok":true,"off_platform":false,"reason":"","fields":{"tros_distro":"...","setup_path":"...","ros2_available":...,"packages_installed":N}}
+# Non-board: {"ok":false,"off_platform":true,"reason":"not_on_rdk_board: /sys/class/socinfo not found","fields":null}
+# Board but TROS not installed: reason set to "TROS not installed"
 #
 # Principles: source in subshell (does NOT affect outer env); read-only (no
 # installs); idempotent; bash-only.
@@ -29,16 +29,16 @@ fi
 # --- If no TROS found, check if we're even on a board ---
 if [ "$tros_distro" = "none" ]; then
     if [ ! -d /sys/class/socinfo ] && [ ! -d /opt/tros ]; then
-        echo '{"error":"not_on_board"}'
+        echo '{"ok":false,"off_platform":true,"reason":"not_on_rdk_board: /sys/class/socinfo not found","fields":null}'
         exit 0
     fi
     # On a board but TROS not installed
-    echo "{"
+    echo '{"ok":true,"off_platform":false,"reason":"TROS not installed","fields":{'
     echo "  \"tros_distro\": \"none\","
     echo "  \"setup_path\": \"\","
     echo "  \"ros2_available\": false,"
     echo "  \"packages_installed\": 0"
-    echo "}"
+    echo '}}'
     exit 0
 fi
 
@@ -63,10 +63,10 @@ result=$(
 ros2_available=$(echo "$result" | head -1)
 packages_installed=$(echo "$result" | tail -1)
 
-# --- Emit JSON ---
-echo "{"
+# --- Emit JSON (contract: ok/off_platform/reason/fields) ---
+echo '{"ok":true,"off_platform":false,"reason":"","fields":{'
 echo "  \"tros_distro\": \"${tros_distro}\","
 echo "  \"setup_path\": \"${setup_path}\","
 echo "  \"ros2_available\": ${ros2_available},"
 echo "  \"packages_installed\": ${packages_installed}"
-echo "}"
+echo '}}'

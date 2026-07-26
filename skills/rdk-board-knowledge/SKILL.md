@@ -128,4 +128,4 @@ Route to Workflow 2 / xburn-flashing.md. Use **DFU+Fastboot** (blank/bricked). E
 | [xburn-flashing.md](references/xburn-flashing.md) | Flashing an S100/S100P/S600 — full DFU/Fastboot steps, Xburn settings, region flash/backup, host driver setup |
 | [diagnostic-commands.md](references/diagnostic-commands.md) | Need a command's risk tier or board applicability before running it |
 | [hardware-notes.md](references/hardware-notes.md) | Common dev traps and the full misconception→correction catalog |
-| `scripts/board_probe.sh` | Live board identity probe — reads `/sys/class/socinfo/` + `/proc/device-tree/model` for current board_id / som_name / model / OS version (structured JSON; non-board → `{"error":"not_on_board"}`) |
+| `scripts/board_probe.sh` | Live board identity probe — reads `/sys/class/socinfo/` + `/proc/device-tree/model` for current board_id / som_name / model / OS version (structured JSON `{ok,off_platform,reason,fields}`; non-board → `{"ok":false,"off_platform":true,"reason":"not_on_rdk_board","fields":null}`) |

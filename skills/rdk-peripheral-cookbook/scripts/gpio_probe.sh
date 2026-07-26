@@ -5,8 +5,9 @@
 # — so the agent can verify "is the GPIO line visible / is CAN up" before
 # advising wiring commands.
 #
-# Output: JSON {"gpio_lines":N, "can_interfaces":[...], "can0_state":"..."}
-# Non-board environment: {"error":"not_on_board"}
+# Output: JSON {"ok":true,"off_platform":false,"reason":"","fields":{"gpio_lines":N,"can_interfaces":[...],"can0_state":"..."}}
+# Non-board: {"ok":false,"off_platform":true,"reason":"not_on_rdk_board: /sys/class/socinfo not found","fields":null}
+# Board but libgpiod missing: reason set to "libgpiod not found"
 #
 # Principles: read-only (no gpioset, no config writes); idempotent;
 # no libgpiod → degrade with install hint; bash-only.
@@ -16,7 +17,7 @@ set -euo pipefail
 
 # --- Check if we're on an RDK board ---
 if [ ! -d /sys/class/socinfo ]; then
-    echo '{"error":"not_on_board"}'
+    echo '{"ok":false,"off_platform":true,"reason":"not_on_rdk_board: /sys/class/socinfo not found","fields":null}'
     exit 0
 fi
 
@@ -52,12 +53,9 @@ if [ -d /sys/class/net ]; then
 fi
 [ -z "$can_interfaces" ] && can_interfaces="\"none\""
 
-# --- Emit JSON ---
-echo "{"
+# --- Emit JSON (contract: ok/off_platform/reason/fields) ---
+echo '{"ok":true,"off_platform":false,"reason":"'"${gpio_note}"'","fields":{'
 echo "  \"gpio_lines\": ${gpio_lines},"
-if [ -n "$gpio_note" ]; then
-    echo "  \"gpio_note\": \"${gpio_note}\","
-fi
 echo "  \"can_interfaces\": [${can_interfaces}],"
 echo "  \"can0_state\": \"${can0_state}\""
-echo "}"
+echo '}}'

@@ -134,4 +134,4 @@ First check the board: dedicated fan-speed sysfs control with `cooling_deviceN` 
 |---|---|
 | [system-config.md](references/system-config.md) | Full per-task commands, srpi-config menu trees, config.txt bodies, every X/S difference, thermal-zone/trip-point tables, Samba/NFS unit files, with provenance |
 | `scripts/sysconf_lookup.py` | Deterministic "board → CPU freq points / governor path / thermal-zone & fan cooling-device mapping" lookup, so you don't recite per-board sysfs from memory |
-| `scripts/sys_probe.sh` | Live system config probe — reads `ip addr` (UP interfaces) + `/boot/config.txt` existence + `scaling_governor` + `ping -c1 -W1` gateway reachability (structured JSON; non-board → `{"error":"not_on_board"}`) |
+| `scripts/sys_probe.sh` | Live system config probe — reads `ip addr` (UP interfaces) + `/boot/config.txt` existence + `scaling_governor` + `ping -c1 -W1` gateway reachability (structured JSON `{ok,off_platform,reason,fields}`; non-board → `{"ok":false,"off_platform":true,"reason":"not_on_rdk_board","fields":null}`) |

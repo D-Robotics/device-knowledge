@@ -119,5 +119,5 @@ Walk Workflow 3's camera order: `ls /dev/video*` + `lsusb` → `v4l2-ctl --list-
 | [camera-commands.md](references/camera-commands.md) | Camera command details (v4l2, MIPI sensors) |
 | [hardware-notes.md](references/hardware-notes.md) | Deep dives: the 0-to-1 standard path and the full deployment-pitfalls catalog |
 | `scripts/toolchain_selector.py` | Quick board → march/tool/format/runtime lookup |
-| `scripts/bpu_status.sh` | Live BPU + memory status probe — reads `/sys/devices/system/bpu/bpu0/ratio` + `/proc/meminfo` + `hrut_bpuprofile` for current BPU frequency, memory, and utilization (structured JSON; non-board → `{"error":"not_on_board"}`) |
+| `scripts/bpu_status.sh` | Live BPU + memory status probe — reads `/sys/devices/system/bpu/bpu0/ratio` + `/proc/meminfo` + `hrut_bpuprofile` for current BPU frequency, memory, and utilization (structured JSON `{ok,off_platform,reason,fields}`; non-board → `{"ok":false,"off_platform":true,"reason":"not_on_rdk_board","fields":null}`) |
 | `assets/templates/*.yaml` | Starting-point config files for conversion |
