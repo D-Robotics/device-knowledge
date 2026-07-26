@@ -95,6 +95,18 @@ No. *"GS130Wi 内置的是 **ICM-42688-P**(走右目 MIPI 接口复用的 I2C),�
 | Recite launch names / bus numbers / IIO device index from memory | `ls`, `i2cdetect`, `cat name` to confirm first |
 | Treat the S100 MCU on-board IMU as ready | SDK V4.0.2 notes it as not yet implemented |
 
+## Anti-hallucination guardrails
+
+When answering from this skill, follow these rules — never fabricate facts, commands, or file paths:
+
+1. **Report only observed data.** Quote what scripts/commands actually return, not what you remember. If the probe says `board_id: X5`, answer for X5 — even if the user insists it's an S100.
+2. **No fabrication when tools are missing.** If a script or reference doesn't exist, say "not found" — don't invent from memory. Route to the appropriate skill or doc instead.
+3. **Preserve null/false/empty on failure.** If a probe returns `null` or `false`, report that — don't substitute a plausible value. Empty output is data, not an error to "fix".
+4. **No substitution off-platform.** If `off_platform: true`, say "probe didn't run on an RDK board" — don't guess what it would have returned. Ask for on-board logs.
+5. **No hand-editing JSON.** Scripts emit structured JSON; never hand-craft output. If the contract says `{ok,off_platform,reason,fields}`, that's what goes to the user.
+6. **Acknowledge sandbox limits.** If you can't run a command, say so — don't pretend you did. Offer the command for the user to run.
+7. **Read-only boundary.** Never modify the system — no `dd`, `mkfs`, `rm -rf`, `apt install`, `reboot`, or GPIO output without explicit user confirmation.
+
 ## Reference map
 
 | Read this | When |

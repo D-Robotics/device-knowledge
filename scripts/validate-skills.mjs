@@ -109,6 +109,13 @@ for (const dir of readdirSync(SKILLS)) {
     if (!existsSync(refPath)) fail(dir, `引用的文件不存在: ${lnk[1]}`);
   }
 
+  // 校验 anti-hallucination guardrails section 存在（mcp-builder / skill-creator 工具型 skill 豁免）
+  if (dir !== 'mcp-builder' && dir !== 'skill-creator') {
+    if (!text.includes('## Anti-hallucination guardrails')) {
+      fail(dir, '缺少 ## Anti-hallucination guardrails section');
+    }
+  }
+
   // 校验 scripts/ 只读 + 幂等 + 语法
   validateScripts(skillDir, dir);
 }

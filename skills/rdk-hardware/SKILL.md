@@ -69,7 +69,7 @@ Never assume the board. An X3 pinout handed to an X5 user, or a SocketCAN comman
 2. **Read the LED correctly** — X3/Ultra: a **red** LED means power OK. X5/S-series: **green** = power OK, **orange** = status/Main running (orange blink on X5 needs firmware 3.1.0+).
 3. **Cooling** — Ultra requires active cooling (ships a fan); S-series (especially S600 @560 TOPS) needs a fan + heatsink under load. Monitor with `hrut_somstatus`.
 
-## Worked Examples
+## Worked examples
 
 **Example 1 — "RDK 各个板子的引脚都一样吗?能直接套树莓派的接线吗?"**
 No on both counts. The 40-pin is RPi-compatible in *shape* but GPIO numbering differs (use `Hobot.GPIO`, not RPi numbers). Across RDK boards the pinout differs too — X5 has more UART/PWM/I2C than X3. And **S600 has no 40-pin at all**: it uses self-locking connectors at **1.8V** IO (not 3.3V), so wiring 3.3V peripherals straight in is wrong. Confirm the board first, then read its row in board-specs.md.
@@ -83,7 +83,7 @@ Depends on the board. X5/Ultra: `root/root` (and `sunrise/sunrise`). S100/S100P/
 **Example 4 — "S600 和 S100 是不是一样的,文档能照搬吗?"**
 No — re-confirm before copying. S600 is the new flagship: 18× A78AE + 6× R52+ + **4× Nash BPU (560 TOPS)**, and it runs **Ubuntu 24.04 + TROS Jazzy** (`/opt/tros/jazzy/`, packages `tros-jazzy-*`), whereas S100 is 22.04 + Humble. S600 also has **no 40-pin** and **1.8V** IO. Same `.hbm` model family and `hbm_runtime`, but paths, package names, and the IO interface differ — don't copy S100 commands verbatim.
 
-## Common Pitfalls
+## Common pitfalls
 
 | ❌ Don't | ✅ Do |
 |---------|------|
@@ -96,7 +96,19 @@ No — re-confirm before copying. S600 is the new flagship: 18× A78AE + 6× R52
 | Power any board from a laptop USB port | Use the official supply; under-power = reboot loops |
 | Assume `192.168.1.10` for every board | X5/S-series = `192.168.127.10`; only X3≤2.0.0/Ultra = `.1.10` |
 
-## Reference Map
+## Anti-hallucination guardrails
+
+When answering from this skill, follow these rules — never fabricate facts, commands, or file paths:
+
+1. **Report only observed data.** Quote what scripts/commands actually return, not what you remember. If the probe says `board_id: X5`, answer for X5 — even if the user insists it's an S100.
+2. **No fabrication when tools are missing.** If a script or reference doesn't exist, say "not found" — don't invent from memory. Route to the appropriate skill or doc instead.
+3. **Preserve null/false/empty on failure.** If a probe returns `null` or `false`, report that — don't substitute a plausible value. Empty output is data, not an error to "fix".
+4. **No substitution off-platform.** If `off_platform: true`, say "probe didn't run on an RDK board" — don't guess what it would have returned. Ask for on-board logs.
+5. **No hand-editing JSON.** Scripts emit structured JSON; never hand-craft output. If the contract says `{ok,off_platform,reason,fields}`, that's what goes to the user.
+6. **Acknowledge sandbox limits.** If you can't run a command, say so — don't pretend you did. Offer the command for the user to run.
+7. **Read-only boundary.** Never modify the system — no `dd`, `mkfs`, `rm -rf`, `apt install`, `reboot`, or GPIO output without explicit user confirmation.
+
+## Reference map
 
 | Read this | When |
 |-----------|------|

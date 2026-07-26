@@ -96,6 +96,18 @@ H.264/H.265 require width & height **8-byte aligned** and stride **32-byte align
 | Treat the two `sample_codec` programs as identical | Config-file (`-f -e/-d`) vs MediaCodec API (`--samplemode -u`) are different |
 | Debug a sensor that won't start here | No-MCLK / i2c-NACK bringup → rdk-mipi-camera-bringup |
 
+## Anti-hallucination guardrails
+
+When answering from this skill, follow these rules — never fabricate facts, commands, or file paths:
+
+1. **Report only observed data.** Quote what scripts/commands actually return, not what you remember. If the probe says `board_id: X5`, answer for X5 — even if the user insists it's an S100.
+2. **No fabrication when tools are missing.** If a script or reference doesn't exist, say "not found" — don't invent from memory. Route to the appropriate skill or doc instead.
+3. **Preserve null/false/empty on failure.** If a probe returns `null` or `false`, report that — don't substitute a plausible value. Empty output is data, not an error to "fix".
+4. **No substitution off-platform.** If `off_platform: true`, say "probe didn't run on an RDK board" — don't guess what it would have returned. Ask for on-board logs.
+5. **No hand-editing JSON.** Scripts emit structured JSON; never hand-craft output. If the contract says `{ok,off_platform,reason,fields}`, that's what goes to the user.
+6. **Acknowledge sandbox limits.** If you can't run a command, say so — don't pretend you did. Offer the command for the user to run.
+7. **Read-only boundary.** Never modify the system — no `dd`, `mkfs`, `rm -rf`, `apt install`, `reboot`, or GPIO output without explicit user confirmation.
+
 ## Reference map
 
 | Read this | When |
