@@ -60,6 +60,18 @@
         { "id": "5a", "text": "Says on Bookworm and later config.txt is at /boot/firmware/config.txt." },
         { "id": "5b", "text": "Notes /boot/config.txt is now a placeholder / no longer the real file, so edits there have no effect." }
       ]
+    },
+    {
+      "id": 6,
+      "name": "rpi-probe-script-verification",
+      "prompt": "怎么确认我这块树莓派的具体型号和版本？",
+      "expected_output": "References scripts/rpi_probe.sh to read /proc/device-tree/model + /proc/cpuinfo Revision + vcgencmd measure_clock arm, outputs structured JSON with model, revision, arm_clock fields.",
+      "files": [],
+      "assertions": [
+        { "id": "6a", "text": "References scripts/rpi_probe.sh as the tool to identify the Raspberry Pi board." },
+        { "id": "6b", "text": "Mentions the JSON output fields: model, revision, arm_clock." },
+        { "id": "6c", "text": "Notes the script is read-only and idempotent (safe to run without side effects)." }
+      ]
     }
   ]
 }

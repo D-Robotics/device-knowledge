@@ -103,3 +103,4 @@ No — re-confirm before copying. S600 is the new flagship: 18× A78AE + 6× R52
 | [board-specs.md](references/board-specs.md) | Need an exact per-board number — RAM / TOPS / interface counts / power / LED / IO level / default IP / probe IDs |
 | [hardware-notes.md](references/hardware-notes.md) | Board confirmed, need a subsystem deep-dive — 40PIN, camera, buses, CAN, power, display, network, BPU monitoring, paths, thermals, OS/user differences |
 | `scripts/board_specs.py` | Deterministic board → spec lookup (`board_specs.py s600`, or `--field can`) |
+| `scripts/board_probe.sh` (in rdk-board-knowledge) | Live board identity probe — reads `/sys/class/socinfo/` + `/proc/device-tree/model` for current board_id / som_name / model / OS version (structured JSON; non-board → `{"error":"not_on_board"}`). Cross-skill reference: use this for live board confirmation, use `board_specs.py` for static spec lookup |

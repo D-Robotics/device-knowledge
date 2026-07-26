@@ -61,6 +61,18 @@
         { "id": "5b", "text": "Notes it is X3 4GB only and that ION memory must be set (1.9GB) or the model won't load." },
         { "id": "5c", "text": "Does NOT recommend hobot_llamacpp for the X3 (X3 is not in its platform flags)." }
       ]
+    },
+    {
+      "id": 6,
+      "name": "llm-env-check-probe",
+      "prompt": "想在板上跑大模型，怎么先确认当前板的内存够不够、装了哪些 LLM 包？",
+      "expected_output": "References the llm_env_check.sh script to check board_id, memory, and installed LLM packages in structured JSON for stack matching.",
+      "files": [],
+      "assertions": [
+        { "id": "6a", "text": "References or suggests running scripts/llm_env_check.sh (or equivalent llm_env_check.sh) to check the LLM environment." },
+        { "id": "6b", "text": "Mentions the script checks memory (mem_total), board_id, and/or installed LLM packages (hobot_llm, hobot_llamacpp, oellm)." },
+        { "id": "6c", "text": "Notes the script is read-only and safe, or that it recommends a stack based on the detected board." }
+      ]
     }
   ]
 }

@@ -63,6 +63,18 @@
         { "id": "5b", "text": "Explains cross-architecture incompatibility (Bayes .bin vs Nash .hbm)." },
         { "id": "5c", "text": "Says to reconvert for S100 (hb_compile, march nash-e, produces .hbm)." }
       ]
+    },
+    {
+      "id": 6,
+      "name": "bpu-status-probe",
+      "prompt": "想知道板子 BPU 当前频率和利用率，怎么看？",
+      "expected_output": "References the bpu_status.sh script to read BPU ratio, memory, and utilization in structured JSON, rather than running raw sysfs cat commands.",
+      "files": [],
+      "assertions": [
+        { "id": "6a", "text": "References or suggests running scripts/bpu_status.sh (or equivalent bpu_status.sh) to check BPU status." },
+        { "id": "6b", "text": "Mentions the script outputs structured JSON with bpu_ratio and/or mem_total and/or bpu_util fields." },
+        { "id": "6c", "text": "Notes the script is read-only and safe, or that hrut_bpuprofile degrades gracefully if not installed." }
+      ]
     }
   ]
 }

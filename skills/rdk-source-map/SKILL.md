@@ -1,17 +1,17 @@
 ---
 name: rdk-source-map
-description: Map and disambiguate repositories in the D-Robotics GitHub org (226 public / 327 total incl. private) — tell the user what a repo is, which layer it belongs to, which board it targets, which repo to use for a task, and how to build an RDK OS image or TROS workspace from source. Use whenever the user sees a D-Robotics repo and doesn't know what it does, can't tell hobot- (hyphen, BSP) from hobot_ (underscore, ROS2 app), asks "which repo do I clone for X", or wants the repo/manifest/rdk-gen/vcstool source-build flow. 触发词:这个仓库是干嘛的、属于哪一层、对应哪块板、该 clone 哪个仓、hobot- 和 hobot_ 区别、连字符 下划线、rdk-gen、manifest、repo sync、vcstool、ros2.repos、从源码构建镜像、定制内核、编译 TROS、x5-rdk-gen、s100-rdk-gen。Routing — finding a doc-site chapter → rdk-doc-finder; running a ready-made model on-board → rdk-model-zoo; ROS node usage → rdk-ros; embodied/LLM deployment → rdk-embodied-lerobot / rdk-llm-deployment.
+description: Map and disambiguate repositories in the D-Robotics GitHub org (350 public / ~440 total incl. private) — tell the user what a repo is, which layer it belongs to, which board it targets, which repo to use for a task, and how to build an RDK OS image or TROS workspace from source. Use whenever the user sees a D-Robotics repo and doesn't know what it does, can't tell hobot- (hyphen, BSP) from hobot_ (underscore, ROS2 app), asks "which repo do I clone for X", or wants the repo/manifest/rdk-gen/vcstool source-build flow. 触发词:这个仓库是干嘛的、属于哪一层、对应哪块板、该 clone 哪个仓、hobot- 和 hobot_ 区别、连字符 下划线、rdk-gen、manifest、repo sync、vcstool、ros2.repos、从源码构建镜像、定制内核、编译 TROS、x5-rdk-gen、s100-rdk-gen。Routing — finding a doc-site chapter → rdk-doc-finder; running a ready-made model on-board → rdk-model-zoo; ROS node usage → rdk-ros; embodied/LLM deployment → rdk-embodied-lerobot / rdk-llm-deployment.
 ---
 
 # D-Robotics GitHub Org Repo Map
 
-Help a user who is staring at the [D-Robotics org](https://github.com/D-Robotics) (226 public repos, 327 total including private) and cannot tell which repo is which. This skill answers four questions: **what is this repo, what layer/board does it belong to, which repo should I use for my task, and how do I build an image/workspace from source.** The single most important rule: **`hobot-` (hyphen) and `hobot_` (underscore) are two different systems** — get that wrong and every downstream answer is wrong.
+Help a user who is staring at the [D-Robotics org](https://github.com/D-Robotics) (350 public repos, ~440 total including private) and cannot tell which repo is which. This skill answers four questions: **what is this repo, what layer/board does it belong to, which repo should I use for my task, and how do I build an image/workspace from source.** The single most important rule: **`hobot-` (hyphen) and `hobot_` (underscore) are two different systems** — get that wrong and every downstream answer is wrong.
 
-> Sources: live `gh api orgs/D-Robotics/repos` metadata (verified 2026-06, 226 public / 327 total) plus the READMEs of [rdk-gen](https://github.com/D-Robotics/rdk-gen), [manifest](https://github.com/D-Robotics/manifest), and [robot_dev_config](https://github.com/D-Robotics/robot_dev_config). Repo counts drift as the org evolves — re-run `gh api` to confirm before quoting an exact number.
+> Sources: live `gh api orgs/D-Robotics/repos` metadata (verified 2026-07, 350 public / ~440 total) plus the READMEs of [rdk-gen](https://github.com/D-Robotics/rdk-gen), [manifest](https://github.com/D-Robotics/manifest), and [robot_dev_config](https://github.com/D-Robotics/robot_dev_config). Repo counts drift as the org evolves — re-run `gh api` to confirm before quoting an exact number.
 
 ## The one distinction that matters most: hyphen vs underscore
 
-Verified by name across all public repos (2026-06): ~20 `hobot-*` (hyphen) vs ~38 `hobot_*` (underscore). They are NOT stylistic variants of the same thing. (Counts drift — `gh api orgs/D-Robotics/repos --paginate --jq '.[].name' | grep -c '^hobot-'` to recount.)
+Verified by name across all public repos (2026-07): ~20 `hobot-*` (X3, hyphen) + ~18 `x5-hobot-*` (X5, hyphen) vs ~48 `hobot_*` (underscore). They are NOT stylistic variants of the same thing. (Counts drift — `gh api orgs/D-Robotics/repos --paginate --jq '.[].name' | grep -c 'hobot-'` to recount hyphen; `grep -c 'hobot_'` for underscore.)
 
 | | `hobot-xxx` (**hyphen**) | `hobot_xxx` (**underscore**) |
 | --- | --- | --- |
@@ -77,7 +77,7 @@ Both flows, with exact commands, are in [os-image-build.md](references/os-image-
 | **Build/customize an OS image, kernel, driver, add a sensor** | `*-rdk-gen` + `*-manifest` + `kernel`/`uboot`/`bootloader` + `hobot-*` (hyphen) |
 | Compile all of TROS from source | `robot_dev_config` (entry) + `tros_*` |
 | Package a TROS app into a deb for the app center | `nodehub_*` (READMEs mostly reference TROS docs) |
-| Read official doc source | `rdk_doc` (main, 16★) / `rdk_x_doc` / `rdk_s_doc` / `tros_doc` / `model_zoo_doc` → skill `rdk-doc-finder` |
+| Read official doc source | `rdk_doc` (main, 17★) / `rdk_x_doc` / `rdk_s_doc` / `rdk_oe_s_doc` / `tros_doc` / `model_zoo_doc` / `xburn_doc` → skill `rdk-doc-finder` |
 
 The full 12-family map with representative repo lists is in [repo-families.md](references/repo-families.md).
 

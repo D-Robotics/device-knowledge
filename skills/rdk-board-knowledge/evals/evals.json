@@ -96,6 +96,18 @@
         { "id": "8b", "text": "Tells the user to read real supported modes with v4l2-ctl --list-formats-ext and match width/height/fps to a listed entry exactly." },
         { "id": "8c", "text": "Notes the RDK USB-camera default device node is /dev/video8, not /dev/video0." }
       ]
+    },
+    {
+      "id": 9,
+      "name": "board-probe-script-verification",
+      "prompt": "怎么确认我当前这块板的型号？有没有一键查的脚本？",
+      "expected_output": "References the board_probe.sh script to read /sys/class/socinfo/board_id and som_name for a structured JSON identity probe, rather than asking the user to run raw cat commands.",
+      "files": [],
+      "assertions": [
+        { "id": "9a", "text": "References or suggests running scripts/board_probe.sh (or equivalent board_probe.sh) as the recommended way to identify the board." },
+        { "id": "9b", "text": "Mentions the script outputs structured JSON with board_id and/or som_name fields." },
+        { "id": "9c", "text": "Notes the script is read-only and safe (does not modify board state) or degrades gracefully off-board." }
+      ]
     }
   ]
 }

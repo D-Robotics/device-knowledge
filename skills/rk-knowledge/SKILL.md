@@ -55,6 +55,8 @@ RK3588 vs RK3588S: same NPU/CPU; "S" is the cost-reduced package (fewer PCIe/USB
 3. **NPU driver present:** `dmesg | grep -i rknpu` (should show the RKNPU kernel driver probing). `lscpu` / `lsusb` for the rest.
 4. Read the cheat-sheet row → know the core count (3 for RK3588, 2 for RK3576) before deciding any `core_mask` strategy.
 
+**验证** — `bash scripts/rk_probe.sh` outputs JSON with `model`, `soc`, `kernel`, and `npu_driver` fields; soc matches expected `rockchip,rk35xx`.
+
 ### Workflow 2 — Convert a model to `.rknn` (PC side, the core loop)
 
 Conversion runs on an **x86_64 (or aarch64) Linux PC**, never as the deployment step on the board. Full command reference: [rknn-toolkit-workflow.md](references/rknn-toolkit-workflow.md).
@@ -64,6 +66,8 @@ Conversion runs on an **x86_64 (or aarch64) Linux PC**, never as the deployment 
 3. **Convert with the Python API** — `RKNN()` → `config(target_platform='rk3588', ...)` → `load_onnx(...)` → `build(do_quantization=True, dataset='dataset.txt')` (≈ a few hundred calibration images) → `export_rknn('model.rknn')`. `target_platform` must match the board (`rk3588`, `rk3576`, …); a `.rknn` built for one platform will not run on another.
 4. **Verify before deploying** — `rknn.accuracy_analysis(...)` to catch quantization drift, and `rknn.eval_perf()` for on-NPU latency (needs a connected board). For INT8 accuracy loss, try hybrid/mixed quantization or per-channel quant in `config`.
 5. **`rknn_model_zoo`** has a ready convert script per model (`convert.py <onnx> <platform> <dtype> <out.rknn>`) — prefer it over hand-writing the API for the common detectors.
+
+**验证** — converted `.rknn` file exists (`ls -la *.rknn`) + `rknn.accuracy_analysis()` shows quantization drift within acceptable range + toolkit2 and board `librknnrt` versions match.
 
 ### Workflow 3 — Run the `.rknn` on the board
 
@@ -84,9 +88,13 @@ outputs = rknn.inference(inputs=[img])
 3. `target_platform` at convert time == this SoC?
 4. Only then suspect the model / preprocessing (input layout NHWC vs NCHW, mean/std, color order).
 
+**验证** — `rk_probe.sh` npu_driver field shows "detected" + `RKNNLite().init_runtime()` returns without error + `dmesg | grep -i rknpu` shows NPU driver activity.
+
 ### Workflow 4 — Out of scope: LLMs on RK35xx
 
 For large language models on RK35xx, Rockchip ships a **separate SDK, RKNN-LLM** (`airockchip/rknn-llm`, with `rkllm-toolkit` to convert to `.rkllm` and `librkllmrt` to run). It is **not** part of rknn-toolkit2. If the user asks "run Qwen/Llama/DeepSeek on RK3588", point them to RKNN-LLM and note this skill covers the vision/CNN RKNN path. Do not try to push an LLM through rknn-toolkit2.
+
+**验证** — confirm user is pointed to RKNN-LLM SDK (`rkllm-toolkit` / `.rkllm` / `librkllmrt`) and NOT trying to use rknn-toolkit2 for LLM conversion.
 
 ## Worked examples
 
@@ -120,3 +128,4 @@ Lead with the version rule: *"This is almost always a PC-toolkit-vs-board-runtim
 |-----------|------|
 | [rknn-toolkit-workflow.md](references/rknn-toolkit-workflow.md) | Converting / deploying a model — full toolkit2 Python API call sequence, `config`/`build` params, quantization, board-side Lite2 + C API, `core_mask`, version-matching, and the RKNN-LLM out-of-scope note |
 | `scripts/rk_npu_selector.py` | Quick SoC → NPU TOPS / core count / `core_mask` ceiling lookup, so the per-core-vs-total fact never drifts |
+| `scripts/rk_probe.sh` | Live on-device probe — reads /proc/device-tree/model + compatible + /proc/version + dmesg rknpu → JSON `{"model", "soc", "kernel", "npu_driver"}` |

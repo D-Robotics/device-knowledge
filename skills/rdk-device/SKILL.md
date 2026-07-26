@@ -49,11 +49,13 @@ Confirm the board first (`cat /sys/class/socinfo/board_id`), then everything dow
 
 If flashing fails or the orange light never blinks → suspect **image checksum** and **SD card quality** (≥8GB Class 10) before blaming the flasher.
 
+**验证:** `bash scripts/bpu_status.sh` returns `bpu_ratio` non-zero and `mem_free` sufficient (>512 MB); indicator light blinks orange/green; SSH connects and `ls /app/pydev_demo/` shows sample directories.
+
 ### Workflow 2 — Model conversion & deployment loop (the core)
 
 **Use when:** 部署模型, YOLO 转换, hb_mapper, pt 直接跑很慢, BPU 推理.
 
-1. **Confirm the board** → read the cheat-sheet row. `cat /sys/class/socinfo/board_id` (X3 fallback: `som_name`).
+1. **Confirm the board & BPU state** → read the cheat-sheet row. Run `bash scripts/bpu_status.sh` for structured JSON (`board_id`, `bpu_ratio`, `mem_total`, `mem_free`, `bpu_util`), or `cat /sys/class/socinfo/board_id` (X3 fallback: `som_name`). Verify BPU ratio is non-zero and memory is sufficient before starting conversion.
 2. **Export ONNX correctly (host)** — clone the **official `ultralytics/yolov5`** repo and modify the **Detect output head** per the [model_zoo YOLOv5 doc](https://github.com/D-Robotics/rdk_model_zoo/blob/rdk_x3/demos/detect/YOLOv5/README_cn.md) (strip post-processing, emit 4-D NHWC). Both `v2.0` (LeakyReLU) and `v7.0` (Sigmoid) work — it is **not** "v2.0 only", and you do **not** need a D-Robotics fork.
 3. **Quantize (host Docker)** — the command differs by family, don't mix them:
    - **X3/X5/Ultra:** `hb_mapper checker` (op support) → ~50–100 calibration images → `hb_mapper makertbin --config x.yaml` → `.bin`
@@ -63,6 +65,8 @@ If flashing fails or the orange light never blinks → suspect **image checksum*
 5. **Verify the BPU is actually working** — `hb_eval_perf` for latency/FPS, and `hrut_bpuprofile -b 0` on-board: if BPU utilization doesn't move during inference, you're still on the CPU path.
 
 If conversion fails on an op → check the [official supported-op list](https://developer.d-robotics.cc/rdk_x_doc/Advanced_development/toolchain_development/intermediate/supported_op_list) (Transformer ops are only partially supported, Nash only). To write the actual load+inference code on-board, see [board-inference-api.md](references/board-inference-api.md).
+
+**验证:** converted `.bin`/`.hbm` exists in `/userdata/models/`; `python3 main.py --task detect` writes an output image to `test_data/`; `hrut_bpuprofile -b 0` shows BPU utilization moving during inference (not stuck at 0%).
 
 ### Workflow 3 — Preinstalled demos & camera bringup
 
@@ -78,6 +82,8 @@ If conversion fails on an op → check the [official supported-op list](https://
 4. Confirm the image topic is healthy (`ros2 topic list`) **before** attaching any inference node.
 
 If the same error repeats twice, stop retrying the same parameter — check rdk_doc and the board log instead. Camera command details: [camera-commands.md](references/camera-commands.md).
+
+**验证:** `v4l2-ctl --list-devices` shows the camera; `ros2 topic echo /image` (or `/hbmem_img`) returns frames; inference node publishes to its output topic (e.g. `/hobot_dnn_detection`).
 
 ## Worked examples
 
@@ -113,4 +119,5 @@ Walk Workflow 3's camera order: `ls /dev/video*` + `lsusb` → `v4l2-ctl --list-
 | [camera-commands.md](references/camera-commands.md) | Camera command details (v4l2, MIPI sensors) |
 | [hardware-notes.md](references/hardware-notes.md) | Deep dives: the 0-to-1 standard path and the full deployment-pitfalls catalog |
 | `scripts/toolchain_selector.py` | Quick board → march/tool/format/runtime lookup |
+| `scripts/bpu_status.sh` | Live BPU + memory status probe — reads `/sys/devices/system/bpu/bpu0/ratio` + `/proc/meminfo` + `hrut_bpuprofile` for current BPU frequency, memory, and utilization (structured JSON; non-board → `{"error":"not_on_board"}`) |
 | `assets/templates/*.yaml` | Starting-point config files for conversion |

@@ -62,6 +62,8 @@ Verified against the live `rdk_x5` and `rdk_s` branch READMEs. The `rdk_s` branc
    `main.py` with no args runs the default (yolo11n + bus.jpg). Success = the output image is written.
 5. **If slow / low FPS**, confirm you are actually running the BPU `.bin`/`.hbm` and not a raw `.pt`/`.onnx` (the latter runs CPU-only → 1–2 FPS; see rdk-device).
 
+**验证:** `ls test_data/inference_*.jpg` shows the output image was written; `python3 main.py --task detect` completes without error; BPU is active (`hrut_bpuprofile -b 0` shows non-zero utilization during inference).
+
 ### Workflow 2 — Answer "which models does board X have + how fast" (benchmark lookup)
 
 **Use when:** the user asks whether a specific model runs on their board, or wants latency/FPS/accuracy figures.
@@ -73,6 +75,8 @@ Verified against the live `rdk_x5` and `rdk_s` branch READMEs. The `rdk_s` branc
    - **S600** (1 chapter): **LLM benchmark only** in the appendix. S600 vision/speech models exist as runnable samples on the `rdk_s` branch but have no per-model perf appendix yet.
 2. For the per-board, per-model tables (verified figures, branch paths), read [per-board-model-catalog.md](references/per-board-model-catalog.md).
 3. If the appendix has no entry, that means "no published number," **not** "cannot run" — check the `rdk_s`/`rdk_x5` sample README.
+
+**验证:** [per-board-model-catalog.md](references/per-board-model-catalog.md) contains verified per-board latency/FPS/accuracy; confirm the model + board combination exists before quoting numbers; `python3 scripts/benchmark_lookup.py --board <board> --model <model>` returns structured JSON with latency/FPS/accuracy fields.
 
 ### Workflow 3 — Boundary: ready-made vs. convert-it-yourself
 
@@ -114,3 +118,4 @@ Read the X5 detection appendix (`per-board-model-catalog.md` → RDK X5 → dete
 | [model-zoo-catalog.md](references/model-zoo-catalog.md) | Branch strategy, directory layout, format×runtime table, download path, run checklist — the "how the repo is organized" reference |
 | [per-board-model-catalog.md](references/per-board-model-catalog.md) | Per-board, per-model verified benchmark tables (latency / FPS / accuracy) and exact branch/sample paths — including the S600 LLM numbers and the S100/S600 sample matrix |
 | `scripts/branch_selector.py` | Deterministic board → repo / branch / sample-dir / artifact / runtime lookup |
+| `scripts/benchmark_lookup.py` | Structured JSON benchmark lookup — board + model → latency_ms / fps_single / fps_dual / ap_pytorch / ap_python / ttft_ms / tps / memory_gb (anti-hallucination: cite exact numbers, don't parse Markdown) |

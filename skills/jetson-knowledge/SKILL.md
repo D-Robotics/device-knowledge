@@ -62,6 +62,8 @@ JetPack is the board SDK. It bundles **Jetson Linux (a.k.a. L4T — Linux for Te
 3. **Read the cheat-sheet row** for AI perf, max JetPack, and whether Super Mode applies.
 4. If the user expects JetPack 6 on **Xavier NX or legacy Nano**, stop — those modules cap at 5.1.x / 4.6.x respectively.
 
+**验证** — `bash scripts/jetson_probe.sh` outputs JSON with `model` and `jetpack` fields; model matches the expected Jetson module name (e.g. "NVIDIA Jetson Orin Nano Developer Kit").
+
 ### Workflow 2 — First setup, Super Mode, and clocks
 
 **Use when:** 刚拿到 Jetson, 怎么开始, 刷机, 性能上不去, Super 模式怎么开.
@@ -71,6 +73,8 @@ JetPack is the board SDK. It bundles **Jetson Linux (a.k.a. L4T — Linux for Te
 3. **Enable Super Mode** (Orin Nano/NX on JetPack 6.2): `sudo nvpmodel -m 2` (Nano) or `sudo nvpmodel -m 0` (NX) → reboot. List profiles with `sudo nvpmodel -q`.
 4. **Pin max clocks** — `sudo jetson_clocks` locks the GPU/CPU/EMC to max for benchmarking (it does NOT raise the nvpmodel cap; set the power mode first).
 5. **Verify** — `tegrastats` shows live GPU%, EMC, power, and thermals; install `jtop` (`sudo pip3 install jetson-stats`) for a top-like dashboard.
+
+**验证** — `jetson_probe.sh` jetpack field is non-empty + `sudo nvpmodel -q` shows Super Mode profile active + `tegrastats` reports non-zero GPU frequency.
 
 ### Workflow 3 — Run a model with TensorRT (.onnx → .engine)
 
@@ -86,6 +90,8 @@ On Jetson you do **not** ship a `.pt`/`.onnx` to production — you build a **Te
    Add `--int8` (with calibration) for max throughput on Orin's INT8 path; `--useDLACore=0 --allowGPUFallback` to offload to the DLA accelerator and free the GPU.
 3. **Set the power mode first** (Workflow 2) — benchmarking before `nvpmodel`/`jetson_clocks` gives misleadingly low FPS.
 4. **Profile** — `trtexec --loadEngine=model.engine` reports latency/throughput; `tegrastats` confirms the GPU is actually loaded.
+
+**验证** — `ls -la *.engine` confirms engine file exists + `trtexec --loadEngine=model.engine` reports latency/throughput numbers + `tegrastats` shows GPU utilization during inference.
 
 For prebuilt model pipelines, point users at **NVIDIA `jetson-inference`** (Hello AI World) and **DeepStream** rather than hand-rolling.
 
@@ -123,3 +129,4 @@ This is a cross-platform selection question — **route to rdk-ecosystem**, whic
 | [jetpack-stack.md](references/jetpack-stack.md) | JetPack ↔ L4T ↔ CUDA/TensorRT version matrix, flashing methods, `nvcr.io` container matching, version-check commands |
 | [tensorrt-workflow.md](references/tensorrt-workflow.md) | trtexec flags, ONNX export, INT8/DLA, jetson-inference / DeepStream entry points, profiling |
 | `scripts/jetson_lookup.py` | Deterministic module → AI perf / GPU arch / max JetPack / Super-mode lookup |
+| `scripts/jetson_probe.sh` | Live on-device probe — reads /proc/device-tree/model + /etc/nv_tegra_release + nvidia-smi → JSON `{"model", "jetpack", "gpu_mem", "cuda_cores"}` |

@@ -44,13 +44,16 @@ TROS vision nodes name topics very consistently:
 
 **Use when:** `ros2: command not found`, TROS env, can't find a launch/config, `ros2 pkg`, `colcon`.
 
-1. **Source TROS** — `/opt/tros/humble/setup.bash` (or `/opt/tros/jazzy/setup.bash` on S600). If `ros2` still fails, try `su - sunrise` first.
-2. **Verify** — `ros2 pkg list | head` returns ROS2/TROS package names.
+1. **Probe the environment** — run `bash scripts/tros_check.sh` for structured JSON (`tros_distro`, `setup_path`, `ros2_available`, `packages_installed`). It detects which TROS distro exists (`humble` vs `jazzy` vs `none`), sources in a subshell, and verifies `ros2` is callable. If `ros2_available` is false, try `su - sunrise` (some images only configure TROS for the sunrise user).
+2. **Source manually if needed** — `source /opt/tros/humble/setup.bash` (or `/opt/tros/jazzy/setup.bash` on S600). If `ros2` still fails, try `su - sunrise` first.
+3. **Verify** — `ros2 pkg list | head` returns ROS2/TROS package names.
 3. **Locate the package, don't guess** — `ros2 pkg prefix <pkg>` gives the install path; if it errors, the package name or install is wrong.
 4. **Find launch/config/model files** — `find /opt/tros -name "*launch.py"`. D-Robotics packages mostly use `*_launch.py` (a few use `*.launch.py`). Preinstalled nodes live in `/opt/tros/humble/lib/<pkg>/` and `share/<pkg>/`; model files sit in the package's `config/` (`*.bin` on X-series, `*.hbm` on S-series).
 5. **Inspect a launch before running** — `ros2 launch <pkg> <launch.py> --show-args`. For a failing node, `ros2 run <pkg> <node> --ros-args --log-level debug`.
 
 Never copy a relative config path between working directories — resolve absolute paths via `ros2 pkg prefix` / `find` on the actual board. Full command table: [ros-commands.md](references/ros-commands.md).
+
+**验证:** `bash scripts/tros_check.sh` returns `ros2_available: true` and `packages_installed` > 0; `ros2 pkg list | head` shows TROS package names; `ros2 pkg prefix <pkg>` resolves to an install path.
 
 ### Workflow 2 — Pick a perception node for a capability
 
@@ -62,12 +65,16 @@ Never copy a relative config path between working directories — resolve absolu
 4. Copy the minimal `launch`, swapping the **model filename** for the board's artifact (`.bin` on X-series vs `.hbm` on S-series; within S-series `nashe` for S100, `nashm` for S100P, `nashp` for S600).
 5. For detection/classification/segmentation, most share **`dnn_node_example`** (repo [hobot_dnn](https://github.com/D-Robotics/hobot_dnn)) — switch models via `dnn_example_config_file` rather than a different package.
 
+**验证:** `ros2 launch <pkg> <launch.py> --show-args` runs without error; `ros2 topic list` shows the node's output topic publishing (e.g. `/hobot_dnn_detection`); model filename matches the board artifact (`.bin` X-series / `.hbm` S-series).
+
 ### Workflow 3 — Stereo depth & lidar bringup
 
 **Use when:** hobot_stereonet, double camera, Livox / Mid-360 / HAP lidar, point cloud sparse, packet loss.
 
 - **Stereo depth (`hobot_stereonet`, X5 / S100 / S100P)** — calibrate the stereo pair first (checkerboard → `left.yaml`/`right.yaml`/`extrinsics.yaml`, path given in launch). Left/right timestamp skew **> 30 ms** badly degrades disparity — use a hardware trigger or PTP sync. Input is a left/right spliced combined image on `/image_combine_raw`; outputs are `/StereoNetNode/stereonet_depth` (mm), `/StereoNetNode/stereonet_pointcloud2` (m), `/StereoNetNode/stereonet_visual` (older docs write these as `~/stereonet_*`).
 - **Livox lidar (`livox_ros_driver2`)** — must be **wired** (Wi-Fi bandwidth is insufficient). Keep NIC `MTU = 1500` (`sudo ip link set dev eth0 mtu 1500`) or the whole cloud goes sparse. Default subnet `192.168.1.x`; pick the launch by model (`ros2 launch livox_ros_driver2 msg_HAP_launch.py`). Details: [hardware-notes.md](references/hardware-notes.md).
+
+**验证:** stereo depth — `ros2 topic echo /StereoNetNode/stereonet_depth` returns depth messages (not empty); depth visualization image (`/StereoNetNode/stereonet_visual`) is non-black. Lidar — `ros2 topic echo /livox/lidar` returns point cloud data; `ping <lidar-ip>` succeeds; `ip link show eth0` shows MTU 1500.
 
 ### Workflow 4 — Full robot app cases (AMR / line-follower)
 
@@ -110,3 +117,4 @@ Two usual causes: (1) the stereo pair was never calibrated → generate `left/ri
 | [app-cases.md](references/app-cases.md) | Building the full official AMR or line-follower robot end to end (hardware list → calibration → mapping/nav, or collect → train → quantize → on-board inference) |
 | [hardware-notes.md](references/hardware-notes.md) | Deep dives: TROS env layout, hobot_stereonet calibration, Livox lidar networking |
 | `scripts/tros_env.py` | Quick board → ROS2 distro / setup path / apt prefix / model artifact lookup |
+| `scripts/tros_check.sh` | Live TROS/ROS2 environment probe — detects `/opt/tros/humble/` vs `/opt/tros/jazzy/`, sources in subshell, verifies `ros2` availability + counts installed packages (structured JSON; non-board → `{"error":"not_on_board"}`) |

@@ -59,6 +59,18 @@
         { "id": "5a", "text": "Confirms rknn-toolkit2 is installable from PyPI (pip install rknn-toolkit2), latest 2.3.x." },
         { "id": "5b", "text": "States a .rknn is platform-specific: target_platform must match the SoC, so an rk3588 model does not run on rk3576 (and vice-versa)." }
       ]
+    },
+    {
+      "id": 6,
+      "name": "rk-probe-script-verification",
+      "prompt": "怎么确认我的板子是 RK3588 还是 RK3576？NPU 驱动有没有加载？",
+      "expected_output": "References scripts/rk_probe.sh to read /proc/device-tree/model + compatible + /proc/version + dmesg rknpu, outputs structured JSON with model, soc, kernel, npu_driver fields.",
+      "files": [],
+      "assertions": [
+        { "id": "6a", "text": "References scripts/rk_probe.sh as the tool to identify the RK board and check NPU driver status." },
+        { "id": "6b", "text": "Mentions the JSON output fields: model, soc, kernel, npu_driver." },
+        { "id": "6c", "text": "Notes the script is read-only and idempotent (safe to run without side effects)." }
+      ]
     }
   ]
 }

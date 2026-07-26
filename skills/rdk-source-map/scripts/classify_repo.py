@@ -9,12 +9,12 @@ s100-/j5- prefixed repo is public.
 Usage:
     python3 classify_repo.py x5-hobot-multimedia
     python3 classify_repo.py hobot_dnn
-    python3 classify_repo.py rcl
+    python3 classify_repo.py speech_agent_asr
 
-Source of truth: `gh api orgs/D-Robotics/repos` metadata, verified 2026-06
-(226 public / 327 total). This is a heuristic classifier over NAMING
+Source of truth: `gh api orgs/D-Robotics/repos` metadata, verified 2026-07
+(350 public / ~440 total). This is a heuristic classifier over NAMING
 CONVENTIONS; for a definitive answer on an unusual name, look it up:
-    gh api repos/D-Robotics/<name> --jq '{lang:.language, desc:.description, private:.private}'
+    gh api repos/D-Robotics/<name> --jq '{lang:.language, desc:.description, private:.private, fork:.fork, archived:.archived}'
 """
 from __future__ import annotations
 
@@ -31,7 +31,30 @@ PREFIXES = [
 # Upstream ROS2 ports (NOT RDK-original)
 UPSTREAM_ROS2 = re.compile(
     r"^(rcl|rclcpp|rcl_interfaces|rmw_|rosbag2|ament_|tinyxml_vendor|"
-    r"vision_opencv|livox_ros_driver2|isaac_)"
+    r"vision_opencv|livox_ros_driver2|isaac_|Livox.SDK2)"
+)
+
+# Cross-compilation toolchain repos
+CROSS_COMPILE = re.compile(
+    r"^(sysroot_docker|cross_compile|ros2_crosscompile|tros_arm_build)"
+)
+
+# Calibration tooling repos
+CALIBRATION = re.compile(
+    r"^(FAST-Calib|fast-calib2|stereo_calib|stereo_self_calib|"
+    r"stereo_calib_sensitivity|Lidar_Camera_Calib|"
+    r"camera_to_base_footprint|perception_calibrate|"
+    r"colmap.groundtruth)"
+)
+
+# SLAM / VIO repos
+SLAM_VIO = re.compile(
+    r"^(rtabmap|orb_slam|dopenvins|drobotics_vio|semantic_map)"
+)
+
+# Pointcloud processing repos
+POINTCLOUD = re.compile(
+    r"^(pointcloud_|.*_pointcloud_|mask_pc_roi)"
 )
 
 
@@ -57,12 +80,30 @@ def classify(name: str) -> dict[str, str]:
     elif low.endswith("_doc") or low.endswith("-doc") or "_doc_" in low or low.endswith("doc_center"):
         out["layer"] = "Documentation source"
         out["assembly"] = "n/a (docs) — route to skill rdk-doc-finder"
-    elif low.startswith("nodehub"):
+    elif low.startswith("nodehub") or low.startswith("nodedhub"):
         out["layer"] = "NodeHub app packaging (deb for app center)"
         out["assembly"] = "wraps a TROS app"
     elif low.startswith("magicbox"):
         out["layer"] = "MagicBox product companion package"
         out["assembly"] = "product"
+    elif low.startswith("speech_agent"):
+        out["layer"] = "Speech Agent SDK (ASR/TTS/audio/bootstrap) — LLM/speech sub-family 8b"
+        out["assembly"] = "Application (speech pipeline)"
+    elif low.startswith("moss"):
+        out["layer"] = "Agent architecture / evaluation platform (internal/meta)"
+        out["assembly"] = "n/a (meta tooling)"
+    elif CROSS_COMPILE.match(low):
+        out["layer"] = "Cross-compilation toolchain (Docker sysroot + ARM build)"
+        out["assembly"] = "Host-side toolchain — new skill rdk-cross-compilation"
+    elif CALIBRATION.match(low):
+        out["layer"] = "Calibration tooling (camera/stereo/Lidar) — perception sub-family"
+        out["assembly"] = "Application (calibration pipeline) — supplement rdk-ros"
+    elif SLAM_VIO.match(low):
+        out["layer"] = "SLAM / VIO (visual-inertial navigation)"
+        out["assembly"] = "Application (perception) — route to skill rdk-ros"
+    elif POINTCLOUD.match(low):
+        out["layer"] = "Pointcloud processing (voxel/transform/viewer/ROI)"
+        out["assembly"] = "Application (perception) — route to skill rdk-ros"
     elif low.startswith("tros") or low == "robot_dev_config":
         out["layer"] = "TROS tooling / orchestration"
         out["assembly"] = "TROS workspace (vcstool + ros2.repos)"

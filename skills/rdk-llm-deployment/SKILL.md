@@ -21,6 +21,8 @@ Get a chatbot, a vision-language model, or a full voice assistant running **on t
 
 Voice stack (`sensevoice_ros2` ASR, `hobot_tts` TTS, `xiaozhi-in-rdk`) is board-agnostic apt/Python — see Workflow 4.
 
+> **Verify the current board state** — run `bash scripts/llm_env_check.sh` for structured JSON (`board_id`, `mem_total`, `llm_packages`, `recommended_stack`). Confirm the board matches the expected stack before starting; catch mismatches (e.g. hobot_llamacpp on S600) early.
+
 ## The mismatch that wastes the most time
 
 When a user says *"I'm trying to build hobot_llamacpp on my S600"* / *"-DPLATFORM_S600 fails"* / *"S600 上 colcon 编译 hobot_llamacpp 报错"* — **stop them immediately**. `hobot_llamacpp`'s only build flags are `-DPLATFORM_X5` and `-DPLATFORM_S100`; **there is no S600 path in this repo**. S600 on-device LLM/VLM runs on the **D-Robotics_LLM_S600 SDK** (`oellm_runtime`, `libxlm.so`, `.hbm` march `nash-p`). Redirect to Workflow 2, do not debug the build.
@@ -35,66 +37,38 @@ When a user says *"I'm trying to build hobot_llamacpp on my S600"* / *"-DPLATFOR
    - **X5:** `InternVL2_5-1B`, `InternVL3-1B/2B-Instruct`, `SmolVLM2-256M/500M-Video-Instruct`.
    - **S100/S100P:** all of the above **+ `InternVL3-8B-Instruct`** (more RAM).
    - **Pure LLM (no vision):** any GGUF model from HuggingFace.
-2. **Build (on-board or cross-compile)** — Ubuntu 22.04, Linaro/Linux GCC 11.4.0, OpenCV 3.4.5:
-   ```bash
-   git clone https://github.com/ggml-org/llama.cpp -b b4749
-   cmake -B build && cmake --build build --config Release
-   cd hobot_llamacpp && ln -s ../llama.cpp llama.cpp
-   colcon build --merge-install --cmake-args -DPLATFORM_X5=ON  --packages-select hobot_llamacpp   # X5
-   colcon build --merge-install --cmake-args -DPLATFORM_S100=ON --packages-select hobot_llamacpp   # S100/S100P
-   ```
-   Depends on ROS pkgs `dnn_node`, `cv_bridge`, `sensor_msgs`, `hbm_img_msgs`, `ai_msgs`. `hbm_img_msgs` (in `hobot_msgs`) is only needed for the shared-mem image path (`SHARED_MEM=ON`, default).
+2. **Build (on-board or cross-compile)** — full build commands (llama.cpp b4749 + colcon with `-DPLATFORM_X5`/`-DPLATFORM_S100`) → [llm-build-commands.md](references/llm-build-commands.md) §1. ROS deps: `dnn_node`, `cv_bridge`, `sensor_msgs`, `hbm_img_msgs`, `ai_msgs`.
 3. **Get the model files.** Each **VLM needs TWO files**: a vision/ViT encoder **+** the language GGUF. The encoder format is **board-specific**: X5 uses `.bin`, S100 uses `.hbm`.
-4. **Run** — `feed_type` 0=local-image VLM / 1=subscribed-image VLM / 2=subscribed LLM; `model_type` 0=InternVL / 1=SmolVLM:
-   ```bash
-   source ./install/setup.bash
-   cp -r install/lib/hobot_llamacpp/config/ .
-   ros2 run hobot_llamacpp hobot_llamacpp --ros-args \
-     -p feed_type:=0 -p image:=config/image2.jpg -p image_type:=0 \
-     -p user_prompt:="描述一下这张图片."
-   ```
-   On **S100** add the `.hbm` encoder: `-p model_file_name:=vit_model_int16.hbm`.
+4. **Run** — `feed_type` 0=local-image VLM / 1=subscribed-image VLM / 2=subscribed LLM; `model_type` 0=InternVL / 1=SmolVLM. Full run commands + node params → [llm-build-commands.md](references/llm-build-commands.md) §2. On **S100** add the `.hbm` encoder: `-p model_file_name:=vit_model_int16.hbm`.
 5. **Verify** — text output on topic `/llama_cpp_node`; intermediate (TTS-feedable) text on `/tts_text`. Drive prompts live by publishing `std_msgs/String` to `/prompt_text`.
 
-Full command matrix (InternVL / SmolVLM / pure-LLM, X5 vs S100, exec vs launch) → [llm-voice-stack.md](references/llm-voice-stack.md) §1.
+Full parameter matrix (InternVL / SmolVLM / pure-LLM, X5 vs S100, exec vs launch) → [llm-voice-stack.md](references/llm-voice-stack.md) §1.
+
+**验证:** `ros2 topic echo /llama_cpp_node` returns text output; `bash scripts/llm_env_check.sh` confirms `recommended_stack` matches the board (X5/S100 → hobot_llamacpp); intermediate text on `/tts_text` is non-empty.
 
 ### Workflow 2 — S600 on-device LLM/VLM (oellm_runtime SDK)
 
 **Use when:** any LLM/VLM/ASR on **S600**, or the user tried hobot_llamacpp on S600.
 
-1. **Get the SDK + manual** (per-board run steps live in the manual, not on GitHub):
-   ```bash
-   wget https://d-robotics-aitoolchain.oss-cn-beijing.aliyuncs.com/llm_s600/1.0.2/D-Robotics_LLM_S600_1.0.2_SDK.tar.gz
-   wget https://d-robotics-aitoolchain.oss-cn-beijing.aliyuncs.com/llm_s600/1.0.2/D-Robotics_LLM_S600_1.0.2_Doc.zip
-   ```
+1. **Get the SDK + manual** (per-board run steps live in the manual, not on GitHub) — download URLs + `oellm_server` setup → [llm-build-commands.md](references/llm-build-commands.md) §3.
 2. **Supported models (D-Robotics_LLM_S600 1.0.2):** LLM = DeepSeek-R1-Distill-Qwen-1.5B, Qwen3-0.6B/1.7B/4B/8B; VLM = Qwen2.5-VL-3B/7B-Instruct, Qwen3-VL-2B/4B/8B-Instruct, InternVL2-2B; VLA = Pi0; ASR = whisper-medium.
 3. **Pre-compiled `.hbm` models** — links are inside the SDK at `oellm_runtime/model/resolve_model_nash-p.md` (`nash-p` = S600). Artifacts are `.hbm`, march **`nash-p`**.
-4. **(Optional) OpenAI-compatible HTTP server** via [`oellm_server`](https://github.com/D-Robotics/oellm_server) on top of `oellm_runtime` (`/health`, `/v1/models`, `/v1/chat/completions` with SSE streaming):
-   ```bash
-   export LD_LIBRARY_PATH=<...>/oellm_runtime/lib:$LD_LIBRARY_PATH
-   python3 openai_server.py --model-type 7 --hbm-path <model.hbm> \
-     --tokenizer-dir <dir> --template-path <chat_template> --host 0.0.0.0 --port 8000
-   ```
-   `--model-type` 0=INTERNVL (then `--config-path` required), 1/4/7 = text models (then `--hbm-path` + `--tokenizer-dir` required). The README examples ship for the S100 SDK; S600 uses the same interface — defer to the S600 manual for final wiring. Run `sh set_performance_mode.sh` first for full speed.
+4. **(Optional) OpenAI-compatible HTTP server** via [`oellm_server`](https://github.com/D-Robotics/oellm_server) — endpoints `/health`, `/v1/models`, `/v1/chat/completions` (SSE). `--model-type` 0=INTERNVL / 1/4/7=text. Full setup → [llm-build-commands.md](references/llm-build-commands.md) §3.
 
-> The model_zoo / LLM_Toolchain S600 numbers (TTFT / TPS / memory) are **benchmarks, not a runtime** — actual deployment goes through this SDK. Benchmark table → [llm-voice-stack.md](references/llm-voice-stack.md) §6.
+> The model_zoo / LLM_Toolchain S600 numbers (TTFT / TPS / memory) are **benchmarks, not a runtime** — actual deployment goes through this SDK. Benchmark table → [llm-voice-stack.md](references/llm-voice-stack.md) §6, or get structured JSON via `python3 scripts/llm_benchmark.py --board s600 --model <model>`.
+
+**验证:** `curl http://localhost:8000/health` returns 200; `curl http://localhost:8000/v1/models` lists the loaded model; `bash scripts/llm_env_check.sh` confirms `board_id` is S600 and `recommended_stack` is `oellm_runtime`; `python3 scripts/llm_benchmark.py --board s600 --model <model>` returns expected TTFT/TPS/memory JSON.
 
 ### Workflow 3 — hobot_llm legacy LLM (X3 4GB only)
 
 **Use when:** plain text chat on an X3, "apt LLM node", smallest footprint.
 
-```bash
-pip3 install transformers
-sudo apt update && sudo apt install -y hobot-dnn          # update on-board dnn
-sudo apt install -y tros-humble-hobot-llm                 # or tros-hobot-llm (foxy)
-wget http://archive.d-robotics.cc/llm-model/llm_model.tar.gz
-sudo tar -xf llm_model.tar.gz -C /opt/tros/${TROS_DISTRO}/lib/hobot_llm/
-ros2 run hobot_llm hobot_llm_chat                          # terminal chat; or `hobot_llm` for topic I/O
-```
-
+Full install + run commands → [llm-build-commands.md](references/llm-build-commands.md) §4. Key constraints:
 - Model is **Bloom 1.4B**; **X3 4GB RAM only**, Ubuntu 20.04 (Foxy) / 22.04 (Humble).
-- **Raise the BPU reserved memory to 1.7GB** (repo README + device-tree value `0x6a400000`; the rdk_doc page rounds this to ~1.9GB) via `srpi-config`, or the model fails to load. Best perf: CPU `performance` governor + boost.
-- Prefer `hobot_llamacpp` for any X5/S100 new project — don't default to `hobot_llm`.
+- **Raise BPU reserved memory to 1.7GB** (`0x6a400000`; doc rounds to ~1.9GB) via `srpi-config` or model won't load.
+- Prefer `hobot_llamacpp` for any X5/S100 new project.
+
+**验证:** `ros2 run hobot_llm hobot_llm_chat` starts and returns text responses; `free -h` shows >1.7 GB BPU reserved memory (set via `srpi-config`); board is X3 4 GB.
 
 ### Workflow 4 — Voice assistant loop (ASR → LLM → TTS) and 小智
 
@@ -103,24 +77,9 @@ ros2 run hobot_llm hobot_llm_chat                          # terminal chat; or `
 Two ways to build it:
 
 **A. Compose the ROS pipeline** (mic → ASR → LLM → speaker):
-1. **ASR — `sensevoice_ros2`** (offline SenseVoice.cpp). `sudo apt install -y tros-humble-sensevoice-ros2`.
-   ```bash
-   source /opt/tros/humble/setup.bash
-   ros2 launch sensevoice_ros2 sensevoice_ros2.launch.py \
-     audio_asr_model:="sense-voice-small-fp16.gguf" language:="zh" micphone_name:="plughw:0,0"
-   ```
-   - ASR result → `/asr_text` (`std_msgs/String`) → feed straight into hobot_llamacpp's `/prompt_text`.
-   - Command-word / wakeup events → `/audio_smart` (`audio_msg/msg/SmartAudioData`).
-   - **Command words** live in `config/cmd_word.json` (the actually-shipped file is at the `config/` root; the README's "Execution" prose still references an older `config/hrsc/cmd_word.json` path — trust the shipped `config/` file). Shipped default is **5** words: `向前走 / 向后退 / 向左转 / 向右转 / 停止运动`. The **wakeup** word is a *separate* concept, set by `wakeup_name` (**default `你好`**, not `地平线你好`), published only when `push_wakeup:=1`. Note `地平线你好` appears **only** in the README's older `config/hrsc/` cmd_word example, not in the shipped config and not as the wakeup default. Runs on X3/X5/S100/S100P/S600.
+1. **ASR — `sensevoice_ros2`** (offline SenseVoice.cpp). Launch command + params → [llm-build-commands.md](references/llm-build-commands.md) §5. ASR result → `/asr_text` → feed into hobot_llamacpp's `/prompt_text`. Command words in `config/cmd_word.json` (shipped 5 words); wakeup is separate (`wakeup_name`, default `你好`, needs `push_wakeup:=1`). Runs on X3/X5/S100/S100P/S600.
 2. **LLM** — feed `/asr_text` into hobot_llamacpp (`feed_type:=2`) / hobot_llm.
-3. **TTS — `hobot_tts`**: subscribes `/tts_text` (`std_msgs/String`) → PCM → ALSA playback.
-   ```bash
-   wget http://archive.d-robotics.cc/tts-model/tts_model.tar.gz
-   sudo tar -xf tts_model.tar.gz -C /opt/tros/${TROS_DISTRO}/lib/hobot_tts/
-   source /opt/tros/setup.bash && export GLOG_minloglevel=1
-   ros2 run hobot_tts hobot_tts
-   ```
-   Default playback device `hw:0,1` (`playback_device` param). Check `ls /dev/snd/` shows a `pcmC0D1p`-style device first.
+3. **TTS — `hobot_tts`**: subscribes `/tts_text` → PCM → ALSA playback. Setup + run → [llm-build-commands.md](references/llm-build-commands.md) §5. Default playback device `hw:0,1`.
 
 **B. Turnkey — `xiaozhi-in-rdk` (小智 AI assistant)**, RDK X3 / X5 / S100, end-to-end real-time voice:
 - 16/24 kHz, Opus codec, spacebar push-to-talk, USB/MIPI dual-camera switch.
@@ -129,6 +88,8 @@ Two ways to build it:
 - Requires: rdkos **3.0.0+**, Python **3.10+**, ALSA + PulseAudio; USB mic + USB speaker recommended (X5 on-board audio works with default-device config).
 
 Voice details → [llm-voice-stack.md](references/llm-voice-stack.md) §3–5.
+
+**验证:** ASR — `ros2 topic echo /asr_text` returns recognized text when speaking; LLM — `/llama_cpp_node` (or `/hobot_llm`) generates responses to `/prompt_text`; TTS — `ros2 topic echo /tts_text` receives text and speaker plays audio; for xiaozhi — spacebar push-to-talk produces a voice response.
 
 ## Worked examples
 
@@ -160,4 +121,7 @@ Stop the build. *"hobot_llamacpp 没有 S600 路径——它的编译宏只有 `
 
 | Read this | When |
 |-----------|------|
+| [llm-build-commands.md](references/llm-build-commands.md) | Quick-reference build & run commands for all 4 workflows (hobot_llamacpp build/run, S600 SDK + oellm_server, hobot_llm, sensevoice/hobot_tts/xiaozhi) |
 | [llm-voice-stack.md](references/llm-voice-stack.md) | Full per-board commands: hobot_llamacpp run matrix (InternVL/SmolVLM/pure-LLM × X5/S100), all node params/topics, sensevoice/hobot_tts/xiaozhi config, oellm_server flags, S100/S600 benchmarks, model-source table |
+| `scripts/llm_env_check.sh` | Live LLM environment probe — reads board_id + memory + scans `/opt/tros/*/lib/` for installed LLM packages (hobot_llm/hobot_llamacpp/oellm) + recommends the matching stack per board (structured JSON; non-board → `{"error":"not_on_board"}`) |
+| `scripts/llm_benchmark.py` | Structured JSON LLM benchmark lookup — board + model → TTFT_ms / TPS / memory_gb / qtype / max_context (S600/S100P/X3; anti-hallucination: cite exact perf numbers, don't parse Markdown) |

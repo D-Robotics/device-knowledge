@@ -61,6 +61,18 @@
         { "id": "5b", "text": "Does NOT provide an S-series hostapd / isc-dhcp-server AP setup as if it works." },
         { "id": "5c", "text": "Optionally notes that Soft AP (incl. X5 5G) is an X-series capability, or suggests Station mode / wired as alternatives." }
       ]
+    },
+    {
+      "id": 6,
+      "name": "network-verify-probe",
+      "prompt": "配完网怎么验证通了没？有没有一个脚本一键查？",
+      "expected_output": "References the sys_probe.sh script to verify network interfaces, gateway reachability, and CPU governor in structured JSON.",
+      "files": [],
+      "assertions": [
+        { "id": "6a", "text": "References or suggests running scripts/sys_probe.sh (or equivalent sys_probe.sh) to verify network configuration." },
+        { "id": "6b", "text": "Mentions the script checks gateway reachability and/or lists network interfaces." },
+        { "id": "6c", "text": "Notes the script is read-only and safe (ping limited to 1 packet 1s timeout, no configuration changes)." }
+      ]
     }
   ]
 }

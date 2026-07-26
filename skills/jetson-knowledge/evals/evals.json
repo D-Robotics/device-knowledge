@@ -58,6 +58,18 @@
         { "id": "5a", "text": "Provides Orin Nano specs (e.g. 67 TOPS / Ampere) as input." },
         { "id": "5b", "text": "Indicates the RDK-vs-Jetson selection/comparison belongs to rdk-ecosystem rather than making the buying call here." }
       ]
+    },
+    {
+      "id": 6,
+      "name": "jetson-probe-script-verification",
+      "prompt": "我有一块 Jetson 板子，怎么确认它具体是哪个型号和 JetPack 版本？",
+      "expected_output": "References scripts/jetson_probe.sh to read /proc/device-tree/model + /etc/nv_tegra_release + nvidia-smi, outputs structured JSON with model, jetpack, gpu_mem, cuda_cores fields.",
+      "files": [],
+      "assertions": [
+        { "id": "6a", "text": "References scripts/jetson_probe.sh as the tool to identify the Jetson module and software stack." },
+        { "id": "6b", "text": "Mentions the JSON output fields: model, jetpack, gpu_mem, cuda_cores." },
+        { "id": "6c", "text": "Notes the script is read-only and idempotent (safe to run without side effects)." }
+      ]
     }
   ]
 }

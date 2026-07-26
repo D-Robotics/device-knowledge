@@ -44,8 +44,11 @@ A peripheral that needs current — **servo, DC/stepper/BLDC motor, WS2812 strip
 2. **Operate by name** for portability: `gpioset $(gpiofind "GPIO17")=1`. This is the only API common to RDK / RPi / Jetson / Rockchip.
 3. **Use `Hobot.GPIO`** only when you need RPi-tutorial compatibility (its API copies `RPi.GPIO`). It is **system-Python only** — `import Hobot.GPIO` inside conda/venv fails; use `/usr/bin/python3`.
 4. **Real-time / <1ms jitter?** Call `libgpiod` from C, or on X5 use `x5-hobot-io` (C bindings, ~10× lower latency than Python `Hobot.GPIO`).
+5. **Verify** — run `bash scripts/gpio_probe.sh` for structured JSON (`gpio_lines`, `can_interfaces`, `can0_state`). Confirm `gpio_lines` > 0 (or note the `gpio_note` if libgpiod is missing) before proceeding with GPIO operations.
 
 Details and the cross-platform pin/bus mapping: [hardware-notes.md](references/hardware-notes.md).
+
+**验证:** `bash scripts/gpio_probe.sh` returns `gpio_lines` > 0; `gpioinfo gpiochip0` shows each line's name and consumer; `gpioget $(gpiofind "GPIO17")` reads the expected level (0 or 1).
 
 ### Workflow 2 — Servos and motors
 
@@ -59,6 +62,8 @@ Details and the cross-platform pin/bus mapping: [hardware-notes.md](references/h
 
 Full wiring tables, code, and the PCA9685 troubleshooting steps: [hardware-notes.md](references/hardware-notes.md) §Servos and §Motors.
 
+**验证:** servo — `cat /sys/class/pwm/pwmchipN/pwmX/enable` shows 1 and the shaft holds position; PCA9685 — `i2cdetect -y <bus>` shows `0x40` and servos respond; motor — shaft turns and `dmesg | tail` shows no overcurrent warnings.
+
 ### Workflow 3 — Audio without TROS (ALSA)
 
 **Use when:** play/record audio and `hobot_audio` (TROS + official mic-array board) is not available.
@@ -70,6 +75,8 @@ Full wiring tables, code, and the PCA9685 troubleshooting steps: [hardware-notes
 5. **Universal fallback:** plug in a **USB sound card** — `snd-usb-audio` auto-loads and `aplay -l` shows it immediately. This is the only recommended path on Jetson (no on-board audio) and on RDK without an I2S HAT.
 
 Command catalog and error table: [hardware-notes.md](references/hardware-notes.md) §Audio.
+
+**验证:** `aplay -l` lists the card; `aplay test.wav` plays sound; `arecord -D plughw:1,0 -d 1 test.wav` records and `aplay test.wav` plays it back; `alsamixer` shows the card unmuted.
 
 ### Workflow 4 — CAN bringup
 
@@ -85,6 +92,8 @@ Command catalog and error table: [hardware-notes.md](references/hardware-notes.m
 
 Full per-board CAN bringup, IPC channel maps, S100 dip mux, and S600 self-locking IO: [rdk-can-and-board-io.md](references/rdk-can-and-board-io.md).
 
+**验证:** X5 — `ip link show can0` shows UP; `candump can0 -L` receives frames after `cansend can0 123#1122334455667788`; S100/S600 — `./canhal_get bypass` prints received CAN frames without error; bus terminator is set (X5 switch / S100 jumper / S600 dip ON).
+
 ### Workflow 5 — Zero-driver diagnosis (device not detected)
 
 **Use when:** "I plugged in X but the board doesn't recognize it / no driver". Don't guess — run the 9 steps. Universal across RDK / RPi / Jetson / Rockchip.
@@ -99,6 +108,8 @@ dmesg | tail -50  →  lsusb  →  ls /dev/ (tty*/video*/i2c-*/spidev*/snd/)
 **Answer template:** ask for **board model + interface (USB / 40PIN I2C / UART / MIPI) + device model** → have the user run `dmesg`/`lsusb`/`ls /dev` and paste back → match the symptom table → give the smallest verifiable command → only then discuss ROS2-node wrapping / autostart.
 
 Symptom→diagnosis table and the three orthogonal fix paths: [hardware-notes.md](references/hardware-notes.md) §Zero-driver diagnosis.
+
+**验证:** `dmesg | tail -50` shows device enumeration (or explains why it's missing); `ls /dev/` shows the expected device node (tty*/video*/i2c-*/spidev*/snd*); `lsmod | grep <kw>` shows the driver loaded.
 
 ## Worked examples
 
@@ -135,3 +146,4 @@ GPIO bitbang can't hold the WS2812 800kHz timing reliably. Answer: *"Drive WS281
 | [hardware-notes.md](references/hardware-notes.md) | Deep dives: cross-platform 40PIN pin/bus mapping, libgpiod, servos & PCA9685, motor paradigms, LEDs/WS2812, ALSA audio, zero-driver diagnosis SOP |
 | [rdk-can-and-board-io.md](references/rdk-can-and-board-io.md) | CAN bringup (X5 SocketCAN / S100·S600 MCU-domain CANHAL), S100 I2C5↔UART2 dip mux, S600 self-locking IO (GPIO/UART6-7/SPI1) |
 | `scripts/can_mode.py <board>` | Deterministic "is this board SocketCAN or MCU-domain CAN?" lookup (X5/S100/S100P/S600/X3/Ultra) |
+| `scripts/gpio_probe.sh` | Live GPIO/CAN probe — reads `gpioinfo` for GPIO line count + scans `/sys/class/net/can*` for CAN interfaces + checks `can0` operstate (structured JSON; non-board → `{"error":"not_on_board"}`) |

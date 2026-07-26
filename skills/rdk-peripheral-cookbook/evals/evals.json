@@ -58,6 +58,18 @@
         { "id": "5a", "text": "Routes to standard ALSA (no TROS needed): arecord -l to find the card, arecord -D plughw to record, aplay to play back." },
         { "id": "5b", "text": "Mentions a USB sound card / mic auto-loads snd-usb-audio and appears in aplay -l/arecord -l (universal fallback)." }
       ]
+    },
+    {
+      "id": 6,
+      "name": "gpio-probe-verification",
+      "prompt": "想确认板上的 GPIO 行数和 CAN 接口状态，有没有脚本直接查？",
+      "expected_output": "References the gpio_probe.sh script to read GPIO lines via gpioinfo and CAN interface state in structured JSON.",
+      "files": [],
+      "assertions": [
+        { "id": "6a", "text": "References or suggests running scripts/gpio_probe.sh (or equivalent gpio_probe.sh) to check GPIO and CAN status." },
+        { "id": "6b", "text": "Mentions the script outputs structured JSON with gpio_lines and/or can_interfaces fields." },
+        { "id": "6c", "text": "Notes the script is read-only and safe (uses gpioinfo not gpioset), or degrades gracefully if libgpiod is not installed." }
+      ]
     }
   ]
 }

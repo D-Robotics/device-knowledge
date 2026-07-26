@@ -58,35 +58,30 @@ Full commands, menus, config-file bodies, item-by-item X/S differences, and prov
 ### Workflow 1 — Network configuration
 
 1. **Probe the family and version.** `nmcli device` (present → NetworkManager path). For X-series, version gates the method: X5 ≥ 3.3.0 / X3 ≥ 3.0.2 use NetworkManager; older use `/etc/network/interfaces`.
-2. **Wired static IP.**
-   - X new / S: NetworkManager. X edits `netplan-eth0.nmconnection` `[ipv4] address1=…/24,gateway` + `method=manual` + `route-metric=700`, then `sudo restart_network`. S uses `nmcli connection modify "<conn>" ipv4.method manual ipv4.addresses …` then `nmcli connection down/up "<conn>"`.
-   - X old: edit `/etc/network/interfaces` `iface eth0 inet static`, then `sudo restart_network`.
-   - `route-metric/metric=700` is **intentional** — it lowers wired priority so Wi-Fi wins when both are up. Do not "fix" it.
-3. **Wi-Fi (both families).** Desktop: click the tray Wi-Fi icon. Server: `sudo nmcli device wifi rescan` → `list` → `sudo wifi_connect "SSID" "PASSWD"`. `Scanning not allowed immediately…` = scanned too recently, wait; `No network with SSID … found` = rescan.
-4. **Soft AP.** X-series only (hostapd+isc-dhcp-server, or NM Hotspot; X5 can host 5G with `channel=36 hw_mode=a`). On S-series the doc says AP mode is **not yet available** — do not hand the user a hostapd recipe.
-5. **DNS** (both): add `DNS=…` to `/etc/systemd/resolved.conf`, restart `systemd-resolved`, relink `/etc/resolv.conf`. **Proxy** (S doc): `http_proxy/https_proxy/no_proxy` in `~/.bashrc` (current user) or `/etc/environment` (all users).
+2. **Wired static IP** — X new/S: NetworkManager (`nmcli connection modify` or edit `.nmconnection`); X old: `/etc/network/interfaces`. `route-metric=700` is intentional (Wi-Fi wins when both up) — don't "fix" it. Full commands → [system-config.md](references/system-config.md) §1.1–1.2.
+3. **Wi-Fi** (both) — Desktop: tray icon; Server: `nmcli device wifi rescan` → `list` → `wifi_connect "SSID" "PASSWD"`. Common errors → §1.3.
+4. **Soft AP** — X-series only (hostapd or NM Hotspot; X5 can do 5G); S-series: **not yet available** — don't hand a hostapd recipe. Details → §1.4.
+5. **DNS / proxy / Bluetooth** — DNS: `/etc/systemd/resolved.conf` + relink `resolv.conf`; Proxy (S): `~/.bashrc` or `/etc/environment`; Bluetooth: X needs `startbt.sh` first, S uses `bluetoothctl` directly. Full steps → §1.5–1.8.
+6. **Verify** — run `bash scripts/sys_probe.sh` for structured JSON (`interfaces`, `config_txt_exists`, `cpu_governor`, `gateway_reachable`). Confirm `gateway_reachable` is `true` and the expected interface appears in `interfaces`.
+
+**验证:** `bash scripts/sys_probe.sh` returns `gateway_reachable: true`; `ip addr` shows the configured IP on the expected interface; DNS resolves (`ping -c1 8.8.8.8` succeeds).
 
 ### Workflow 2 — Edit /boot/config.txt (X and S are two different mechanisms)
 
-**X-series** (X3/X5/X3 Module; system ≥ 2.1.0, miniboot ≥ 20231126; edit as root):
-1. Toggle buses: `dtparam=i2c5=on`, `dtparam=uart3=off`. Mind X5 pin multiplexing (one row → one function).
-2. CPU freq: `arm_boost=1` (X3→1.5/1.8G, X5→1.8G), `governor=performance`, or `governor=userspace` + `frequency=…`.
-3. GPIO init: `gpio=5=f3` (mux), `ip`/`op`, `dh`/`dl`, `pu`/`pd`/`pn` (BOARD numbering).
-4. Thermal: `throttling_temp=86000`, `shutdown_temp=112000`.
-5. `[all]/[rdkv1]/[rdkv2]/[rdkmd]/[x5-rdk]` filters scope everything **after** them to that model.
+**X-series** (X3/X5/X3 Module; system ≥ 2.1.0; edit as root): `dtparam` bus toggles, `gpio=` mux/init, `arm_boost`/`governor`/`frequency` for CPU, `throttling_temp`/`shutdown_temp` for thermal, `[all]/[rdkv1]/[rdkv2]/[x5-rdk]` model filters. Full syntax & options → [system-config.md](references/system-config.md) §3.1.
 
-**S-series** (D-Robotics Uboot; priority `setenv > config file > last saveenv`; one line ≤1024 chars; unusable when AVB is enabled, which is off by default):
-1. `bootargs=isolcpus=1-2` (kernel cmdline), `loglevel=8`.
-2. `fdt-enable=/soc/uart@394C0000;` / `fdt-disable=…;` — the trailing `;` is **mandatory**; get the node path from `/proc/device-tree` and prefix `/`.
-3. DTB overlay: `dtc -I dts -O dtb -o x.dtbo x.dtso` → copy to `/boot` → `dtbo_file_path=/x.dtbo`.
-4. There is **no** X-style `dtparam`/`gpio`/`arm_boost`/filter syntax on S.
+**S-series** (D-Robotics Uboot; priority `setenv > config file > saveenv`; ≤1024 chars/line; AVB must be off): `bootargs=` kernel cmdline, `fdt-enable=`/`fdt-disable=` dts node paths (**trailing `;` mandatory**), `dtbo_file_path=` for DTB overlays. **No X-style `dtparam`/`gpio`/`arm_boost`/filter syntax.** Full syntax → §3.2.
+
+**验证:** `cat /boot/config.txt` shows the edited entry; after reboot, the change takes effect (e.g. `dmesg | grep <peripheral>` shows the bus enabled, or the governor/freq value matches); for S-series `fdt-enable`/`fdt-disable` entries, the trailing `;` is present.
 
 ### Workflow 3 — CPU frequency, thermal, and fan
 
-1. **Read state:** `sudo hrut_somstatus` on both families. All `trip_point` edits and sysfs governor changes **reset on reboot** — to persist, add to boot self-start (Workflow 5).
-2. **Lock the CPU clock:** `echo userspace > .../scaling_governor` then write `scaling_setspeed`. Path differs: X3 uses `cpufreq/policy0/`, X5/S use `cpu0/cpufreq/scaling_governor` + `policy0/scaling_setspeed`. Valid freqs: X3 240000–1800000, X5 300000/600000/1200000/1500000, S100 1500000/2000000, S600 525000/1050000/2100000 (per-chip).
-3. **Overclock:** X3 `echo 1 > .../cpufreq/boost` (1.2→1.5G) + performance; X5 boost 1.5→1.8G but **X5H only** (`cat /sys/class/socinfo/soc_name`; X5M cannot, X5U is unlocked but unsupported for mass production). **S-series has no overclock.**
-4. **Fix the fan speed (S only):** S100 fan = `cooling_device2`, bound to `thermal_zone0`. S600 fans = `cooling_device5/6`, bound to `thermal_zone2` and `thermal_zone16`. First set the bound zone `policy` to `user_space`, **then** `echo <0-10> > cooling_deviceN/cur_state` — under `step_wise` the system overrides your value by temperature.
+1. **Read state:** `sudo hrut_somstatus` on both families. All `trip_point` edits and sysfs governor changes **reset on reboot** — persist via boot self-start (Workflow 4).
+2. **Lock CPU clock:** `echo userspace > .../scaling_governor` → write `scaling_setspeed`. Per-board paths and valid frequencies (X3 240000–1800000, X5 300000–1500000, S100 1500000/2000000, S600 525000/1050000/2100000) → [system-config.md](references/system-config.md) §4 or `scripts/sysconf_lookup.py`.
+3. **Overclock:** X3 `echo 1 > .../cpufreq/boost` (1.2→1.5G); X5 1.5→1.8G but **X5H only** (`cat /sys/class/socinfo/soc_name`); **S-series has no overclock.**
+4. **Fix fan speed (S only):** set bound zone `policy=user_space` **first**, then `echo <0-10> > cooling_deviceN/cur_state`. S100: `cooling_device2`↔`zone0`; S600: `cooling_device5/6`↔`zone2`+`zone16`. Full thermal-zone/trip-point tables → §4.3–4.4 or `scripts/sysconf_lookup.py`.
+
+**验证:** `cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` shows `performance` (or `userspace` + `scaling_setspeed` at target freq); S-series fan — `cat /sys/class/thermal/cooling_deviceN/cur_state` shows the set value, not system-overridden; `hrut_somstatus` shows temperature <85 °C.
 
 ### Workflow 4 — Boot self-start (identical on X and S)
 
@@ -97,10 +92,14 @@ Full commands, menus, config-file bodies, item-by-item X/S differences, and prov
 5. Reboot, verify `systemctl status your_script.service` (`active (exited)` = OK).
 - Alternative: insert commands before `exit 0` in `/etc/rc.local` (legacy under systemd).
 
+**验证:** after reboot, `systemctl status your_script.service` shows `active (exited)`; `journalctl -u your_script` shows the service started without errors.
+
 ### Workflow 5 — File sharing (S-series only)
 
-- **Samba:** `apt install samba` → `mkdir ~/shared` → add `[shared]` block to `/etc/samba/smb.conf` (`read only=no`, `guest ok=no`, masks `0775`) → `sudo smbpasswd -a sunrise` → `sudo systemctl restart smbd`. Open the port with `sudo ufw allow samba` only if ufw is on.
-- **NFS client:** `apt install nfs-common` → `mkdir -p /userdata/...` → `sudo mount -v -t nfs -o vers=3,proto=tcp <server>:/path /userdata/...`. For auto-mount on boot, install the `mount-windows-nfs.service` oneshot unit (see reference).
+- **Samba:** install → add `[shared]` block to `smb.conf` → `smbpasswd -a sunrise` → restart smbd. Full `smb.conf` block → [system-config.md](references/system-config.md) §7.
+- **NFS client:** install `nfs-common` → `mount -t nfs -o vers=3,proto=tcp` → for auto-mount, install a `mount-windows-nfs.service` oneshot unit. Full unit file → §7.
+
+**验证:** Samba — `smbclient -L //<board-ip>` lists the `[shared]` share; `smbstatus` shows connected users. NFS — `df -h /userdata/...` shows the mounted NFS volume; `mount | grep nfs` confirms the mount.
 
 ## Worked examples
 
@@ -135,3 +134,4 @@ First check the board: dedicated fan-speed sysfs control with `cooling_deviceN` 
 |---|---|
 | [system-config.md](references/system-config.md) | Full per-task commands, srpi-config menu trees, config.txt bodies, every X/S difference, thermal-zone/trip-point tables, Samba/NFS unit files, with provenance |
 | `scripts/sysconf_lookup.py` | Deterministic "board → CPU freq points / governor path / thermal-zone & fan cooling-device mapping" lookup, so you don't recite per-board sysfs from memory |
+| `scripts/sys_probe.sh` | Live system config probe — reads `ip addr` (UP interfaces) + `/boot/config.txt` existence + `scaling_governor` + `ping -c1 -W1` gateway reachability (structured JSON; non-board → `{"error":"not_on_board"}`) |

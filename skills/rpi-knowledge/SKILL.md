@@ -43,6 +43,8 @@ Notes: the **16GB** option is **Pi 5 only**. CM4 also comes in Lite (no eMMC) an
 
 Full library/command detail: [gpio-rp1.md](references/gpio-rp1.md).
 
+**验证** — `bash scripts/rpi_probe.sh` outputs JSON with `model` and `revision` fields; model confirms "Raspberry Pi 5" when the user's GPIO issue is the RP1 trap.
+
 ### Workflow 2 — Camera bringup (rpicam / libcamera / Picamera2)
 
 **Use when:** "camera no image", `raspistill` not found, which camera command, CSI camera on Bookworm.
@@ -55,6 +57,8 @@ Full library/command detail: [gpio-rp1.md](references/gpio-rp1.md).
 
 Full command/format detail: [camera-stack.md](references/camera-stack.md).
 
+**验证** — `rpicam-hello --list-cameras` shows detected cameras + `rpi_probe.sh` model field confirms Pi variant for correct camera stack routing.
+
 ### Workflow 3 — Running a model on a Raspberry Pi
 
 **Use when:** "run YOLO on my Pi", "is there an NPU", AI HAT+ / Hailo questions.
@@ -66,6 +70,8 @@ Full command/format detail: [camera-stack.md](references/camera-stack.md).
    - **AI HAT+ 26 TOPS** → **Hailo-8** accelerator.
    - Models run as **HEF** files, compiled with Hailo's Dataflow Compiler / Model Zoo on a host (not on the Pi). The Pi runs HailoRT.
 4. **Cross-platform "which board" question?** That's selection — route to **rdk-ecosystem** (RDK-anchored comparison) rather than answering here.
+
+**验证** — `rpi_probe.sh` model field confirms board; ONNX/TFLite model runs without error on CPU; if Hailo HAT+ present: `hailortcli scan` shows device.
 
 ## Worked examples
 
@@ -101,3 +107,4 @@ Don't debug their wiring first. Answer: *"Pi 5 的 GPIO 在 RP1 芯片上、不�
 | [camera-stack.md](references/camera-stack.md) | Camera commands, rpicam-* vs legacy, Picamera2, config.txt, troubleshooting "no cameras available" |
 | [board-specs.md](references/board-specs.md) | Full Pi 5 / Pi 4B / CM4 specs, memory variants, AI HAT+ / Hailo accelerators, official links |
 | `scripts/board_selector.py` | Quick board → SoC/CPU/RAM/RP1/GPIO-lib/AI-path lookup (e.g. `python3 scripts/board_selector.py pi5`) |
+| `scripts/rpi_probe.sh` | Live on-device probe — reads /proc/device-tree/model + /proc/cpuinfo Revision + vcgencmd measure_clock arm → JSON `{"model", "revision", "arm_clock"}` |
