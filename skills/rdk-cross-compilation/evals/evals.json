@@ -1,0 +1,81 @@
+{
+  "skill_name": "rdk-cross-compilation",
+  "description": "Test prompts that verify rdk-cross-compilation triggers and produces correct cross-compile guidance. Prompts are written the way a real RDK developer would phrase them (Chinese). Run with-skill vs baseline and grade the assertions.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "compile-on-board-too-slow",
+      "prompt": "我在板子上直接 make 我的 C++ 项目，编译太慢了，能不能优化一下？",
+      "expected_output": "Interrupts the optimization framing, explains the board is an aarch64 SBC not suited for compilation, and routes to cross-compiling on an x86 host with the aarch64 toolchain.",
+      "files": [],
+      "assertions": [
+        { "id": "1a", "text": "Does NOT suggest make -j or other on-board compilation optimizations as the primary fix." },
+        { "id": "1b", "text": "Explains the board is an aarch64 SBC and compiling on it is slow/resource-limited." },
+        { "id": "1c", "text": "Routes to cross-compiling on an x86 host using gcc-arm-11.2 and aarch64_toolchainfile.cmake." },
+        { "id": "1d", "text": "Mentions deploying the compiled binary to the board via scp." }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "s600-tros-distro",
+      "prompt": "S600 的 TROS 该怎么交叉编译？用哪个 build 脚本？",
+      "expected_output": "S600 uses Jazzy (not Humble), shares s100_build.sh, and needs a Jazzy sysroot Docker.",
+      "files": [],
+      "assertions": [
+        { "id": "2a", "text": "States S600 uses Jazzy distro (/opt/tros/jazzy), NOT Humble." },
+        { "id": "2b", "text": "States the build script is s100_build.sh (S600 shares the S100 build config)." },
+        { "id": "2c", "text": "Mentions the sysroot Docker needs Jazzy TROS headers, not Humble." }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "cross-compile-vs-bpu-conversion",
+      "prompt": "交叉编译和 hb_mapper 有什么区别？我两个都要做吗？",
+      "expected_output": "Explains cross-compilation produces native aarch64 binaries (CPU), while hb_mapper/hb_compile produces BPU model artifacts (.bin/.hbm). A project can need both.",
+      "files": [],
+      "assertions": [
+        { "id": "3a", "text": "Explains hb_mapper/hb_compile converts neural network models for the BPU (produces .bin/.hbm)." },
+        { "id": "3b", "text": "Explains cross-compilation compiles native C/C++/ROS2 code into aarch64 Linux binaries (runs on CPU)." },
+        { "id": "3c", "text": "Mentions a project can need both: cross-compile the C++ inference app + convert the model with hb_mapper." },
+        { "id": "3d", "text": "Routes BPU model conversion to rdk-device skill." }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "ros2-package-missing-headers",
+      "prompt": "交叉编译一个依赖 rclcpp 的 ROS2 包，一直报 fatal error: ros2/rclcpp.hpp: No such file，怎么解决？",
+      "expected_output": "The bare toolchain lacks TROS headers. Need to set up the sysroot Docker with TROS headers + board libs.",
+      "files": [],
+      "assertions": [
+        { "id": "4a", "text": "Explains the bare cross-compiler (gcc-arm-11.2) cannot resolve TROS/ROS2 headers." },
+        { "id": "4b", "text": "Routes to setting up the sysroot Docker (sysroot_docker repo)." },
+        { "id": "4c", "text": "Mentions the sysroot Docker provides /opt/tros headers + board system libs." }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "cmake-toolchain-file",
+      "prompt": "CMake 交叉编译怎么配置？aarch64_toolchainfile.cmake 在哪获取？",
+      "expected_output": "Clone robot_dev_config repo, pass -DCMAKE_TOOLCHAIN_FILE to cmake, verify output with file command.",
+      "files": [],
+      "assertions": [
+        { "id": "5a", "text": "States the toolchain file is in the robot_dev_config repo (git clone -b develop)." },
+        { "id": "5b", "text": "Mentions passing -DCMAKE_TOOLCHAIN_FILE=<path>/aarch64_toolchainfile.cmake to cmake." },
+        { "id": "5c", "text": "Mentions verifying the output with 'file <binary>' showing ARM aarch64." },
+        { "id": "5d", "text": "Notes the toolchain file is shared across all boards (not board-specific)." }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "board-build-script-lookup",
+      "prompt": "X5 的 TROS 交叉编译用哪个 build 脚本？X3 呢？",
+      "expected_output": "X5 uses x5_build.sh, X3 uses all_build.sh. References the cross_compile_lookup.py script or the cheat-sheet table.",
+      "files": [],
+      "assertions": [
+        { "id": "6a", "text": "States X5 uses x5_build.sh." },
+        { "id": "6b", "text": "States X3 uses all_build.sh." },
+        { "id": "6c", "text": "Mentions or references scripts/cross_compile_lookup.py for deterministic lookup." }
+      ]
+    }
+  ]
+}

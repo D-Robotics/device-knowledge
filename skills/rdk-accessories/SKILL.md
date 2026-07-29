@@ -55,7 +55,7 @@ Backed by [hobot_mipi_cam](https://github.com/D-Robotics/hobot_mipi_cam). `hobot
 3. **Python** — build `core` first, then `cd python && make` → `pip install dist/rdkimu-*.whl`; `sudo python3 examples/test_imu.py`.
 4. **ROS2** — `source /opt/tros/*/setup.bash` → `cd ros2 && colcon build` → `source install/setup.bash` → `ros2 launch rdk_imu_module rdk_imu.launch.py`. Topic `/rdkimu/data` (`sensor_msgs/msg/Imu`).
 
-API call order: bus init → device init → enable → read → disable → deinit. **BMI088 accel and gyro are two independent, unsynchronized devices** — use `read_indep()` and check `data.accel.valid`/`data.gyro.valid`, or `read_fused()` for time-aligned 6-axis. The raw SDK read data is `accel` in **m/s²** and **gyro in °/s** (per the C-API doc); only the **ROS2 node** publishes `angular_velocity` in rad/s (ROS convention). Timestamps are `CLOCK_MONOTONIC` ns. Full API details: [accessories-catalog.md](references/accessories-catalog.md#3-rdk-imu-module-bosch-bmi088).
+API call order: bus init → device init → enable → read → disable → deinit. **BMI088 accel and gyro are two independent, unsynchronized devices** — use `read_indep()` and check `data.accel.valid`/`data.gyro.valid`, or `read_fused()` for time-aligned 6-axis. The raw SDK read data is `accel` in **m/s²** and **gyro in °/s** (per the C-API doc); only the **ROS2 node** publishes `angular_velocity` in rad/s (ROS convention). Timestamps are `CLOCK_MONOTONIC` ns. Full API details, config reference, code examples, and troubleshooting: [imu-sdk-guide.md](references/imu-sdk-guide.md). Catalog summary: [accessories-catalog.md](references/accessories-catalog.md#3-rdk-imu-module-bosch-bmi088).
 
 **Path B — RDK OS BMI088 IIO driver** (X5 / X5 Module only, OS image 3.4.x, compatible with 3.5.x):
 1. `sudo srpi-config` → `3 Interface Options` → `I6 IMU` → select `BMI088-I2C-Interface` (or the SPI entry) → reboot.
@@ -111,6 +111,7 @@ When answering from this skill, follow these rules — never fabricate facts, co
 
 | Read this | When |
 |-----------|------|
-| [accessories-catalog.md](references/accessories-catalog.md) | Full specs, every 22-pin/40-pin/CAN pinout, IMU SDK & IIO usage, S100/S600 expansion-board interface and power tables, download links |
+| [accessories-catalog.md](references/accessories-catalog.md) | Full specs, every 22-pin/40-pin/CAN pinout, IMU SDK & IIO usage summary, S100/S600 expansion-board interface and power tables, download links |
+| [imu-sdk-guide.md](references/imu-sdk-guide.md) | **IMU SDK deep dive** — rdk-imu-module-sdk full API reference (C/Python/ROS2), `rdk_imu_config_t` member table, build/install/cross-compile, IIO sysfs interface (BMI088 + ICM-42688-P), code patterns, troubleshooting, performance tuning |
 | `scripts/accessory_lookup.py` | Deterministic "which accessory works on board X / what chip / what interface" lookup |
 | `assets/rdk_imu_x5_default_config.txt` | The official `RDK_IMU_X5_DEFAULT_CONFIG` values (GPIO chip/line, ODR, range, FIFO) to copy into an SDK config |
