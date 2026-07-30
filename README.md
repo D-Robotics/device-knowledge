@@ -13,6 +13,8 @@ Source-backed knowledge for D-Robotics RDK boards (and Jetson / Raspberry Pi / R
 | [`rdk-board-knowledge`](skills/rdk-board-knowledge/) | Board ID, error diagnosis, FAQ, S-series flashing · 板型识别 / 报错诊断 / FAQ / S 系烧录 |
 | [`rdk-system-config`](skills/rdk-system-config/) | System config (network, freq, thermal, autostart) · 系统配置(网络 / 调频 / 温控 / 自启) |
 | [`rdk-device`](skills/rdk-device/) | Deploy your own model end-to-end + first boot + camera · 自训模型端到端部署 + 开箱 + 摄像头 |
+| [`rdk-yolo-toolkit`](skills/rdk-yolo-toolkit/) | End-to-end YOLO training, ONNX export, RDK X5 BPU quantization, board inference, and TROS/ROS2 deployment · YOLO 训练 / ONNX 导出 / RDK X5 BPU 量化 / 板端推理 / TROS 部署 |
+| [`rdk-x5-toolchain-quantization`](skills/rdk-x5-toolchain-quantization/) | Model-agnostic OpenExplorer PTQ workflow for RDK X5 ONNX → `.bin` / `.hbm` compilation, calibration, accuracy, and performance tuning · RDK X5 工具链 PTQ 量化 / 校准 / 精度性能调优 |
 | [`rdk-model-zoo`](skills/rdk-model-zoo/) | Ready-made precompiled BPU models · 取现成预编译 BPU 模型 |
 | [`rdk-ros`](skills/rdk-ros/) | TROS/ROS2 env, nodes, perception · TROS/ROS2 环境 / 节点 / 感知 |
 | [`rdk-multimedia`](skills/rdk-multimedia/) | Hardware codec & camera pipeline · 硬件编解码与相机流水线 |
@@ -72,3 +74,4 @@ skills/<name>/
 ## License
 
 [MIT](LICENSE)
+
