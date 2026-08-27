@@ -76,7 +76,7 @@ If conversion fails on an op → check the [official supported-op list](https://
 - **S-series:** also under `/app/pydev_demo/` (S100 like `01_classification_sample/01_resnet18`, S600 like `classification_sample/resnet18`), via `hbm_runtime`, models in `/opt/hobot/model/{s100|s600}/basic/`.
 
 **Camera bringup — follow this order, don't skip:**
-1. Enumerate: `ls /dev/video*` + `lsusb` (USB) or `dmesg | grep -i mipi` (MIPI).
+1. Enumerate: `ls /dev/video*` + `lsusb` for USB. For X5 MIPI, do **not** require `/dev/video*`; use `bash scripts/ov08d_probe.sh` to inspect `cam-service`, `/dev/vin*`, `/dev/vs-isp*`, `/dev/mipi*`, installed sensor plugins, and any live ROS publisher separately.
 2. List real formats: `v4l2-ctl -d /dev/video0 --list-formats-ext` → find MJPEG resolution+fps.
 3. Configure launch to **MJPEG + an exactly-matching resolution**; validate at 640×480 first.
 4. Confirm the image topic is healthy (`ros2 topic list`) **before** attaching any inference node.
@@ -132,4 +132,5 @@ When answering from this skill, follow these rules — never fabricate facts, co
 | [hardware-notes.md](references/hardware-notes.md) | Deep dives: the 0-to-1 standard path and the full deployment-pitfalls catalog |
 | `scripts/toolchain_selector.py` | Quick board → march/tool/format/runtime lookup |
 | `scripts/bpu_status.sh` | Live BPU + memory status probe — reads `/sys/devices/system/bpu/bpu0/ratio` + `/proc/meminfo` + `hrut_bpuprofile` for current BPU frequency, memory, and utilization (structured JSON `{ok,off_platform,reason,fields}`; non-board → `{"ok":false,"off_platform":true,"reason":"not_on_rdk_board","fields":null}`) |
+| `scripts/ov08d_probe.sh` | Read-only X5 MIPI/OV08D probe. Keeps installed OV08D support, active sensor identity, VIN/ISP nodes, requested mode, ROS publisher, and fresh-frame evidence separate; it never treats an installed plugin as proof that OV08D is attached. |
 | `assets/templates/*.yaml` | Starting-point config files for conversion |

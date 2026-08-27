@@ -8,6 +8,19 @@ import { execFileSync } from 'node:child_process';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS = join(ROOT, 'skills');
+const PYTHON = process.platform === 'win32'
+  ? { command: 'py', prefix: ['-3'] }
+  : { command: 'python3', prefix: [] };
+let BASH = 'bash';
+if (process.platform === 'win32') {
+  try {
+    const gitExecPath = execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim();
+    const gitBash = resolve(gitExecPath, '..', '..', '..', 'bin', 'bash.exe');
+    if (existsSync(gitBash)) BASH = gitBash;
+  } catch {
+    // Fall back to PATH; a missing shell is handled by the existing ENOENT branch.
+  }
+}
 
 let errors = 0;
 let count = 0;
@@ -19,7 +32,7 @@ function parseFrontmatter(text) {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return null;
   const fm = {};
-  for (const line of m[1].split('\n')) {
+  for (const line of m[1].split(/\r?\n/)) {
     const kv = line.match(/^([a-zA-Z][\w-]*):\s*(.*)$/);
     if (kv) fm[kv[1]] = kv[2].replace(/^["']|["']$/g, '').trim();
   }
@@ -68,11 +81,11 @@ function validateScripts(skillDir, skillName) {
       if (/\$\$/.test(code)) fail(skillName, `scripts/${f} 含 $$ 随机性（违反幂等原则）`);
       if (/\$RANDOM/.test(code)) fail(skillName, `scripts/${f} 含 $RANDOM 随机性（违反幂等原则）`);
       // 3. bash -n syntax check
-      try { execFileSync('bash', ['-n', fp], { stdio: 'pipe', timeout: 5000 }); }
+      try { execFileSync(BASH, ['-n', fp], { stdio: 'pipe', timeout: 5000 }); }
       catch (e) { if (e.code !== 'ENOENT') fail(skillName, `scripts/${f} bash -n 语法检查失败`); }
     } else if (f.endsWith('.py')) {
       // python3 -m py_compile syntax check
-      try { execFileSync('python3', ['-m', 'py_compile', fp], { stdio: 'pipe', timeout: 10000 }); }
+      try { execFileSync(PYTHON.command, [...PYTHON.prefix, '-m', 'py_compile', fp], { stdio: 'pipe', timeout: 10000 }); }
       catch (e) { if (e.code !== 'ENOENT') fail(skillName, `scripts/${f} python3 -m py_compile 语法检查失败`); }
     }
   }

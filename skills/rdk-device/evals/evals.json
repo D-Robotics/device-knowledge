@@ -75,6 +75,18 @@
         { "id": "6b", "text": "Mentions the script outputs structured JSON with bpu_ratio and/or mem_total and/or bpu_util fields." },
         { "id": "6c", "text": "Notes the script is read-only and safe, or that hrut_bpuprofile degrades gracefully if not installed." }
       ]
+    },
+    {
+      "id": 7,
+      "name": "x5-ov08d-no-v4l2-assumption",
+      "prompt": "RDK X5 接 OV08D 后没有 /dev/video0，是不是摄像头坏了？怎么确认 1080p NV12 真有新帧？",
+      "expected_output": "Does not treat missing /dev/video* as failure; uses the read-only OV08D probe and separates installed plugin, active sensor identity, VIN/ISP nodes, requested mode, publisher and fresh-frame evidence.",
+      "files": [],
+      "assertions": [
+        { "id": "7a", "text": "Explains that X5 MIPI may expose /dev/vin*, /dev/vs-isp* and /dev/mipi* without /dev/video*." },
+        { "id": "7b", "text": "Uses or references scripts/ov08d_probe.sh and keeps installed OV08D plugin support separate from attached sensor identity." },
+        { "id": "7c", "text": "Requires an active producer plus bounded fresh-frame evidence and checks 1920x1080 NV12/shared-memory parameters." }
+      ]
     }
   ]
 }

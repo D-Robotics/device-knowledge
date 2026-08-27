@@ -1,6 +1,8 @@
 node_modules/
 dist/
 coverage/
+__pycache__/
+*.py[cod]
 .codegraph/
 .codex-claude-code/
 .DS_Store
